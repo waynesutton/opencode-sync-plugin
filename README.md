@@ -2,22 +2,39 @@
 
 Sync your OpenCode sessions to the cloud. Search, share, and access your coding history from anywhere.
 
+[![npm version](https://img.shields.io/npm/v/opencode-sync-plugin.svg)](https://www.npmjs.com/package/opencode-sync-plugin)
+
 ## Installation
+
+### From npm
+
+Published on npm: [opencode-sync-plugin](https://www.npmjs.com/package/opencode-sync-plugin)
 
 ```bash
 npm install -g opencode-sync-plugin
 ```
 
+### From source
+
+```bash
+git clone https://github.com/waynesutton/opencode-sync-plugin
+cd opencode-sync-plugin
+npm install
+npm run build
+```
+
 ## Setup
 
-### 1. Get Your Credentials
+### 1. Get your credentials
 
 You need two things from your OpenSync deployment:
 
-- **Convex URL** - Found in your Convex dashboard (e.g., `https://your-project-123.convex.cloud`)
-- **WorkOS Client ID** - Found in your WorkOS dashboard (e.g., `client_xxxxx`)
+- **Convex URL**: Your deployment URL from the Convex dashboard (e.g., `https://your-project-123.convex.cloud`)
+- **API Key**: Generated in the OpenSync dashboard at **Settings > API Key** (starts with `osk_`)
 
-### 2. Authenticate
+The plugin automatically converts the `.cloud` URL to `.site` for API calls.
+
+### 2. Configure the plugin
 
 ```bash
 opencode-sync login
@@ -26,48 +43,82 @@ opencode-sync login
 Follow the prompts:
 
 1. Enter your Convex URL
-2. Enter your WorkOS Client ID
-3. Complete authentication in browser
+2. Enter your API Key
+
+No browser authentication required.
 
 ### 3. Add to OpenCode
 
-Create or edit `opencode.json` in your project:
+Add the plugin to your `opencode.json`:
 
 ```json
 {
+  "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-sync-plugin"]
 }
 ```
 
-Or add globally at `~/.config/opencode/config.json`.
+Or add globally at `~/.config/opencode/opencode.json`.
 
-## Commands
+## How it works
+
+The plugin hooks into OpenCode events and syncs data automatically:
+
+| Event | Action |
+|-------|--------|
+| `session.created` | Creates session record in cloud |
+| `session.updated` | Updates session metadata |
+| `session.idle` | Final sync with token counts and cost |
+| `message.updated` | Syncs user and assistant messages |
+| `message.part.updated` | Syncs completed message parts |
+
+Data is stored in your Convex deployment. You can view, search, and share sessions via the web UI.
+
+## CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `opencode-sync login` | Authenticate with OpenSync |
+| `opencode-sync login` | Configure with Convex URL and API Key |
 | `opencode-sync logout` | Clear stored credentials |
 | `opencode-sync status` | Show authentication status |
 | `opencode-sync config` | Show current configuration |
 
-## How It Works
-
-The plugin automatically syncs your sessions as you work:
-
-- **Session start** - Creates session record
-- **Each message** - Syncs user messages and assistant responses
-- **Session end** - Updates final token counts and cost
-
-Data is stored in your Convex deployment. You can view, search, and share sessions via the web UI.
-
-## Configuration Storage
+## Configuration storage
 
 Credentials are stored at:
 
 ```
 ~/.config/opencode-sync/
-├── config.json       # Convex URL, WorkOS Client ID
-└── credentials.json  # Access tokens (encrypted)
+  config.json       # Convex URL, API Key
+```
+
+## Plugin architecture
+
+This plugin follows the [OpenCode plugin specification](https://opencode.ai/docs/plugins/):
+
+```typescript
+import type { Plugin } from "@opencode-ai/plugin";
+
+export const OpenCodeSyncPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  // Initialize plugin
+  await client.app.log({
+    service: "opencode-sync",
+    level: "info",
+    message: "Plugin initialized",
+  });
+
+  return {
+    // Subscribe to events
+    event: async ({ event }) => {
+      if (event.type === "session.created") {
+        // Sync session to cloud
+      }
+      if (event.type === "message.updated") {
+        // Sync message to cloud
+      }
+    },
+  };
+};
 ```
 
 ## Troubleshooting
@@ -78,14 +129,12 @@ Credentials are stored at:
 opencode-sync login
 ```
 
-### Token expired
+### Invalid API Key
 
-Tokens auto-refresh. If issues persist:
-
-```bash
-opencode-sync logout
-opencode-sync login
-```
+1. Go to your OpenSync dashboard
+2. Navigate to Settings
+3. Generate a new API Key
+4. Run `opencode-sync login` with the new key
 
 ### Check status
 
@@ -93,7 +142,23 @@ opencode-sync login
 opencode-sync status
 ```
 
+### View logs
+
+Plugin logs are available in OpenCode's log output. Look for entries with `service: "opencode-sync"`.
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Build
+npm run build
+
+# Watch mode
+npm run dev
+```
+
 ## License
 
 MIT
-# opencode-sync-plugin

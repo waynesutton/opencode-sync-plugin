@@ -3,13 +3,8 @@
 import {
   getConfig,
   setConfig,
-  getCredentials,
-  setCredentials,
-  clearCredentials,
+  clearConfig,
 } from "./index.js";
-import open from "open";
-import { createServer } from "http";
-import { URL } from "url";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -33,6 +28,7 @@ async function main() {
   }
 }
 
+// Login with Convex URL and API Key
 async function login() {
   console.log("\n  OpenSync Login\n");
 
@@ -43,126 +39,63 @@ async function login() {
     process.exit(1);
   }
 
-  // Get WorkOS Client ID
-  const workosClientId = await prompt("WorkOS Client ID (e.g., client_xxxxx): ");
-  if (!workosClientId) {
-    console.error("WorkOS Client ID is required");
+  // Validate URL format
+  if (!convexUrl.includes(".convex.cloud") && !convexUrl.includes(".convex.site")) {
+    console.error("Invalid Convex URL. Should end with .convex.cloud or .convex.site");
     process.exit(1);
   }
 
-  setConfig({ convexUrl, workosClientId });
-
-  // Start local server for OAuth callback
-  const port = 9876;
-  const redirectUri = `http://localhost:${port}/callback`;
-
-  console.log("\nOpening browser for authentication...\n");
-
-  // Build auth URL
-  const authUrl = new URL("https://api.workos.com/user_management/authorize");
-  authUrl.searchParams.set("client_id", workosClientId);
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("provider", "authkit");
-
-  // Create server to receive callback
-  const server = createServer(async (req, res) => {
-    const url = new URL(req.url!, `http://localhost:${port}`);
-
-    if (url.pathname === "/callback") {
-      const code = url.searchParams.get("code");
-
-      if (code) {
-        try {
-          // Exchange code for token
-          const response = await fetch(
-            "https://api.workos.com/user_management/authenticate",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                client_id: workosClientId,
-                code,
-                grant_type: "authorization_code",
-              }),
-            }
-          );
-
-          const data = await response.json();
-
-          if (data.access_token) {
-            setCredentials({
-              accessToken: data.access_token,
-              refreshToken: data.refresh_token,
-              expiresAt: Date.now() + data.expires_in * 1000,
-              userId: data.user.id,
-            });
-
-            res.writeHead(200, { "Content-Type": "text/html" });
-            res.end(`
-              <html>
-                <body style="font-family: system-ui; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0a0a0a; color: #fff;">
-                  <div style="text-align: center;">
-                    <h1 style="color: #22c55e;">✓ Authentication Successful</h1>
-                    <p>You can close this window and return to the terminal.</p>
-                  </div>
-                </body>
-              </html>
-            `);
-
-            console.log("✓ Logged in successfully!\n");
-            console.log(`  Email: ${data.user.email}`);
-            console.log(`  User ID: ${data.user.id}\n`);
-
-            server.close();
-            process.exit(0);
-          } else {
-            throw new Error(data.error || "Authentication failed");
-          }
-        } catch (e: any) {
-          res.writeHead(500, { "Content-Type": "text/html" });
-          res.end(`
-            <html>
-              <body style="font-family: system-ui; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0a0a0a; color: #fff;">
-                <div style="text-align: center;">
-                  <h1 style="color: #ef4444;">✗ Authentication Failed</h1>
-                  <p>${e.message}</p>
-                </div>
-              </body>
-            </html>
-          `);
-
-          console.error("✗ Authentication failed:", e.message);
-          server.close();
-          process.exit(1);
-        }
-      } else {
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end("Missing authorization code");
-      }
-    }
-  });
-
-  server.listen(port, () => {
-    open(authUrl.toString());
-  });
-
-  // Timeout after 5 minutes
-  setTimeout(() => {
-    console.error("\n✗ Login timed out. Please try again.");
-    server.close();
+  // Get API Key
+  const apiKey = await prompt("API Key (from Settings page, starts with osk_): ");
+  if (!apiKey) {
+    console.error("API Key is required");
     process.exit(1);
-  }, 300000);
+  }
+
+  // Validate API Key format
+  if (!apiKey.startsWith("osk_")) {
+    console.error("Invalid API Key format. Should start with 'osk_'");
+    process.exit(1);
+  }
+
+  // Test the API key by making a request to the health endpoint
+  const siteUrl = convexUrl.replace(".convex.cloud", ".convex.site");
+  
+  console.log("\nVerifying credentials...");
+  
+  try {
+    const response = await fetch(`${siteUrl}/health`);
+    
+    if (!response.ok) {
+      console.error("\nFailed to connect to OpenSync backend.");
+      console.error("Please verify your Convex URL is correct.");
+      process.exit(1);
+    }
+
+    // Save config
+    setConfig({ convexUrl, apiKey });
+
+    console.log("\nLogin successful!\n");
+    console.log("  Convex URL:", convexUrl);
+    console.log("  API Key:", apiKey.slice(0, 8) + "..." + apiKey.slice(-4));
+    console.log("\n  Add the plugin to your opencode.json:");
+    console.log('  { "plugin": ["opencode-sync-plugin"] }\n');
+  } catch (e) {
+    console.error("\nFailed to connect to OpenSync backend.");
+    console.error("Please verify your Convex URL is correct.");
+    process.exit(1);
+  }
 }
 
+// Clear stored credentials
 function logout() {
-  clearCredentials();
-  console.log("\n✓ Logged out successfully\n");
+  clearConfig();
+  console.log("\nLogged out successfully\n");
 }
 
+// Show authentication status
 function status() {
   const config = getConfig();
-  const creds = getCredentials();
 
   console.log("\n  OpenSync Status\n");
 
@@ -172,22 +105,20 @@ function status() {
     return;
   }
 
-  if (!creds) {
+  if (!config.apiKey) {
     console.log("  Status: Not authenticated\n");
     console.log("  Convex URL:", config.convexUrl);
     console.log("\n  Run: opencode-sync login\n");
     return;
   }
 
-  const isExpired = Date.now() > creds.expiresAt;
-
-  console.log(`  Status: ${isExpired ? "Token expired" : "Logged in"}\n`);
-  console.log("  User ID:", creds.userId);
+  console.log("  Status: Configured\n");
   console.log("  Convex URL:", config.convexUrl);
-  console.log("  Token expires:", new Date(creds.expiresAt).toLocaleString());
+  console.log("  API Key:", config.apiKey.slice(0, 8) + "..." + config.apiKey.slice(-4));
   console.log();
 }
 
+// Show current configuration
 function showConfig() {
   const config = getConfig();
   
@@ -200,10 +131,11 @@ function showConfig() {
   }
   
   console.log("  Convex URL:", config.convexUrl);
-  console.log("  WorkOS Client ID:", config.workosClientId);
+  console.log("  API Key:", config.apiKey ? config.apiKey.slice(0, 8) + "..." + config.apiKey.slice(-4) : "Not set");
   console.log();
 }
 
+// Show help
 function help() {
   console.log(`
   OpenSync CLI
@@ -211,16 +143,17 @@ function help() {
   Usage: opencode-sync <command>
 
   Commands:
-    login   Authenticate with OpenSync
+    login   Configure with Convex URL and API Key
     logout  Clear stored credentials
     status  Show current authentication status
     config  Show current configuration
 
   Setup:
-    1. Run: opencode-sync login
-    2. Enter your Convex URL and WorkOS Client ID
-    3. Complete authentication in browser
-    4. Add plugin to opencode.json: { "plugin": ["opencode-sync-plugin"] }
+    1. Go to your OpenSync dashboard Settings page
+    2. Generate an API Key (starts with osk_)
+    3. Run: opencode-sync login
+    4. Enter your Convex URL and API Key
+    5. Add plugin to opencode.json: { "plugin": ["opencode-sync-plugin"] }
 `);
 }
 
