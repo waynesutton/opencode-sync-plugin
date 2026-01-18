@@ -4,6 +4,9 @@ import {
   getConfig,
   setConfig,
   clearConfig,
+  getSyncedSessions,
+  addSyncedSessions,
+  clearSyncedSessions,
 } from "./config.js";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { homedir } from "os";
@@ -274,9 +277,11 @@ interface OpenCodeLocalMessage {
   tokens?: { input?: number; output?: number; reasoning?: number };
 }
 
-// Test sync connectivity and optionally sync all local sessions
+// Test sync connectivity and optionally sync local sessions
 async function sync() {
   const syncAll = args.includes("--all");
+  const syncNew = args.includes("--new");
+  const syncForce = args.includes("--force");
 
   const config = getConfig();
   if (!config || !config.apiKey || !config.convexUrl) {
@@ -287,8 +292,16 @@ async function sync() {
 
   const siteUrl = config.convexUrl.replace(".convex.cloud", ".convex.site");
 
-  if (syncAll) {
-    await syncAllSessions(siteUrl, config.apiKey);
+  if (syncForce) {
+    // Clear local tracking and sync all
+    clearSyncedSessions();
+    await syncAllSessions(siteUrl, config.apiKey, "force");
+  } else if (syncAll) {
+    // Query backend for existing, skip already synced
+    await syncAllSessions(siteUrl, config.apiKey, "all");
+  } else if (syncNew) {
+    // Use local tracking file to skip already synced
+    await syncAllSessions(siteUrl, config.apiKey, "new");
   } else {
     await syncConnectivityTest(siteUrl, config.apiKey);
   }
@@ -362,9 +375,29 @@ async function syncConnectivityTest(siteUrl: string, apiKey: string) {
   }
 }
 
-// Sync all local OpenCode sessions to the backend
-async function syncAllSessions(siteUrl: string, apiKey: string) {
-  console.log("\n  OpenSync: Syncing All Local Sessions\n");
+// Fetch already-synced session IDs from the backend
+async function fetchBackendSessionIds(siteUrl: string, apiKey: string): Promise<Set<string>> {
+  try {
+    const res = await fetch(`${siteUrl}/sync/sessions/list`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return new Set(Array.isArray(data.sessionIds) ? data.sessionIds : []);
+    }
+  } catch {
+    // Backend endpoint may not exist yet, return empty set
+  }
+  return new Set();
+}
+
+// Sync local OpenCode sessions to the backend
+async function syncAllSessions(siteUrl: string, apiKey: string, mode: "all" | "new" | "force") {
+  const modeLabel = mode === "force" ? "Force Syncing" : mode === "new" ? "Syncing New" : "Syncing All";
+  console.log(`\n  OpenSync: ${modeLabel} Local Sessions\n`);
 
   const opencodePath = join(homedir(), ".local", "share", "opencode", "storage");
   const sessionPath = join(opencodePath, "session");
@@ -407,17 +440,50 @@ async function syncAllSessions(siteUrl: string, apiKey: string) {
     return;
   }
 
-  console.log(`  Found ${sessions.length} sessions\n`);
+  console.log(`  Found ${sessions.length} local sessions`);
 
   if (sessions.length === 0) {
     return;
   }
 
-  let syncedSessions = 0;
+  // Get already-synced session IDs based on mode
+  let alreadySynced = new Set<string>();
+  if (mode === "all") {
+    // Query backend for existing sessions
+    console.log("  Checking backend for existing sessions...");
+    alreadySynced = await fetchBackendSessionIds(siteUrl, apiKey);
+    if (alreadySynced.size > 0) {
+      console.log(`  Found ${alreadySynced.size} already synced on backend`);
+    }
+  } else if (mode === "new") {
+    // Use local tracking file
+    alreadySynced = getSyncedSessions();
+    if (alreadySynced.size > 0) {
+      console.log(`  Found ${alreadySynced.size} in local tracking file`);
+    }
+  }
+  // mode === "force" - alreadySynced stays empty, sync everything
+
+  // Filter sessions to sync
+  const sessionsToSync = sessions.filter((s) => !alreadySynced.has(s.data.id));
+  const skippedCount = sessions.length - sessionsToSync.length;
+
+  if (skippedCount > 0) {
+    console.log(`  Skipping ${skippedCount} already synced sessions`);
+  }
+  console.log(`  Will sync ${sessionsToSync.length} sessions\n`);
+
+  if (sessionsToSync.length === 0) {
+    console.log("  All sessions already synced. Use --force to resync.\n");
+    return;
+  }
+
+  let syncedSessionCount = 0;
   let syncedMessages = 0;
   let failedSessions = 0;
+  const newlySyncedIds: string[] = [];
 
-  for (const session of sessions) {
+  for (const session of sessionsToSync) {
     const { data } = session;
     process.stdout.write(`  Syncing: ${data.title || data.slug || data.id}... `);
 
@@ -495,7 +561,8 @@ async function syncAllSessions(siteUrl: string, apiKey: string) {
         continue;
       }
 
-      syncedSessions++;
+      syncedSessionCount++;
+      newlySyncedIds.push(data.id);
 
       // Sync messages
       let msgCount = 0;
@@ -537,10 +604,18 @@ async function syncAllSessions(siteUrl: string, apiKey: string) {
     }
   }
 
+  // Save newly synced session IDs to local tracking
+  if (newlySyncedIds.length > 0) {
+    addSyncedSessions(newlySyncedIds);
+  }
+
   console.log();
   console.log(`  Summary:`);
-  console.log(`    Sessions synced: ${syncedSessions}`);
+  console.log(`    Sessions synced: ${syncedSessionCount}`);
   console.log(`    Messages synced: ${syncedMessages}`);
+  if (skippedCount > 0) {
+    console.log(`    Skipped: ${skippedCount}`);
+  }
   if (failedSessions > 0) {
     console.log(`    Failed: ${failedSessions}`);
   }
@@ -557,14 +632,16 @@ function help() {
   Usage: opencode-sync <command> [options]
 
   Commands:
-    login        Configure with Convex URL and API Key
-    verify       Verify credentials and OpenCode config
-    sync         Test connectivity and create a test session
-    sync --all   Sync all local OpenCode sessions to the cloud
-    logout       Clear stored credentials
-    status       Show current authentication status
-    config       Show current configuration
-    version      Show version number
+    login         Configure with Convex URL and API Key
+    verify        Verify credentials and OpenCode config
+    sync          Test connectivity and create a test session
+    sync --new    Sync only sessions not in local tracking file
+    sync --all    Sync all sessions (checks backend, skips existing)
+    sync --force  Clear tracking and resync all sessions
+    logout        Clear stored credentials
+    status        Show current authentication status
+    config        Show current configuration
+    version       Show version number
     help         Show this help message
 
   Setup:
@@ -575,7 +652,12 @@ function help() {
     5. Add plugin to opencode.json (see instructions after login)
     6. Run: opencode-sync verify
     7. Run: opencode-sync sync (to test connectivity)
-    8. Run: opencode-sync sync --all (to sync existing sessions)
+    8. Run: opencode-sync sync --new (to sync new sessions only)
+
+  Sync Modes:
+    --new    Fast: uses local tracking, skips previously synced
+    --all    Accurate: queries backend, skips existing on server
+    --force  Full: clears tracking and resyncs everything
 `);
 }
 

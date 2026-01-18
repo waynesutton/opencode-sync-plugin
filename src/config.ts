@@ -12,6 +12,7 @@ interface Config {
 // Use dedicated directory to avoid conflicts with OpenCode's own config
 const CONFIG_DIR = join(homedir(), ".opensync");
 const CONFIG_FILE = join(CONFIG_DIR, "credentials.json");
+const SYNCED_SESSIONS_FILE = join(CONFIG_DIR, "synced-sessions.json");
 
 export function getConfig(): Config | null {
   try {
@@ -44,5 +45,45 @@ export function clearConfig(): void {
     }
   } catch (e) {
     console.error("Error clearing config:", e);
+  }
+}
+
+// Get list of locally tracked synced session IDs
+export function getSyncedSessions(): Set<string> {
+  try {
+    if (!existsSync(SYNCED_SESSIONS_FILE)) return new Set();
+    const content = readFileSync(SYNCED_SESSIONS_FILE, "utf8");
+    const data = JSON.parse(content);
+    return new Set(Array.isArray(data.sessionIds) ? data.sessionIds : []);
+  } catch {
+    return new Set();
+  }
+}
+
+// Add session IDs to local tracking file
+export function addSyncedSessions(sessionIds: string[]): void {
+  try {
+    if (!existsSync(CONFIG_DIR)) {
+      mkdirSync(CONFIG_DIR, { recursive: true });
+    }
+    const existing = getSyncedSessions();
+    for (const id of sessionIds) {
+      existing.add(id);
+    }
+    const data = { sessionIds: Array.from(existing), lastUpdated: Date.now() };
+    writeFileSync(SYNCED_SESSIONS_FILE, JSON.stringify(data, null, 2), "utf8");
+  } catch (e) {
+    console.error("Error saving synced sessions:", e);
+  }
+}
+
+// Clear local tracking file
+export function clearSyncedSessions(): void {
+  try {
+    if (existsSync(SYNCED_SESSIONS_FILE)) {
+      writeFileSync(SYNCED_SESSIONS_FILE, JSON.stringify({ sessionIds: [], lastUpdated: Date.now() }), "utf8");
+    }
+  } catch (e) {
+    console.error("Error clearing synced sessions:", e);
   }
 }

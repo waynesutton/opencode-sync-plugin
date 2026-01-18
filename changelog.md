@@ -4,6 +4,18 @@ All notable changes to opencode-sync-plugin.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.8] - 2026-01-18
+
+### Added
+- `sync --new` command to sync only sessions not in local tracking file
+- `sync --force` command to clear tracking and resync all sessions
+- Local session tracking file (`~/.opensync/synced-sessions.json`)
+- Backend query for existing sessions with `sync --all`
+
+### Changed
+- `sync --all` now queries backend to skip already-synced sessions
+- Added skip count to sync summary output
+
 ## [0.2.7] - 2026-01-18
 
 ### Added
