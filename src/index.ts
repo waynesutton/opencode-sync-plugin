@@ -1,37 +1,4 @@
-import { homedir } from "os";
-import { join } from "path";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-
-// OpenCode plugin types (inline to avoid strict dependency on @opencode-ai/plugin)
-interface PluginClient {
-  app: {
-    log: (entry: {
-      service: string;
-      level: "debug" | "info" | "warn" | "error";
-      message: string;
-      extra?: Record<string, unknown>;
-    }) => Promise<void>;
-  };
-}
-
-interface PluginContext {
-  project: unknown;
-  client: PluginClient;
-  $: unknown;
-  directory: string;
-  worktree: string;
-}
-
-interface PluginEvent {
-  type: string;
-  properties?: Record<string, unknown>;
-}
-
-interface PluginHooks {
-  event?: (input: { event: PluginEvent }) => Promise<void>;
-}
-
-type Plugin = (ctx: PluginContext) => Promise<PluginHooks>;
+// Minimal OpenCode Sync Plugin - Testing version
 
 // Config type for API Key authentication
 interface Config {
@@ -39,31 +6,26 @@ interface Config {
   apiKey: string;
 }
 
-// Safe logger to avoid hard crashes during plugin init
-async function safeLog(
-  client: PluginClient | null | undefined,
-  entry: {
-    service: string;
-    level: "debug" | "info" | "warn" | "error";
-    message: string;
-    extra?: Record<string, unknown>;
-  },
-): Promise<void> {
-  try {
-    await client?.app?.log?.(entry);
-  } catch {
-    // Ignore log failures to keep OpenCode stable
-  }
-}
+// Lazy-loaded config path to avoid module-load issues
+let configDir: string | null = null;
+let configFile: string | null = null;
 
-// Simple file-based config (compatible with Bun)
-const CONFIG_DIR = join(homedir(), ".config", "opencode-sync");
-const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+function getConfigPaths() {
+  if (!configDir) {
+    const { homedir } = require("os");
+    const { join } = require("path");
+    configDir = join(homedir(), ".config", "opencode-sync");
+    configFile = join(configDir, "config.json");
+  }
+  return { configDir, configFile: configFile! };
+}
 
 function readConfigFile(): Config | null {
   try {
-    if (!existsSync(CONFIG_FILE)) return null;
-    const content = readFileSync(CONFIG_FILE, "utf8");
+    const { existsSync, readFileSync } = require("fs");
+    const { configFile } = getConfigPaths();
+    if (!existsSync(configFile)) return null;
+    const content = readFileSync(configFile, "utf8");
     return JSON.parse(content) as Config;
   } catch {
     return null;
@@ -72,75 +34,15 @@ function readConfigFile(): Config | null {
 
 function writeConfigFile(config: Config): void {
   try {
-    if (!existsSync(CONFIG_DIR)) {
-      mkdirSync(CONFIG_DIR, { recursive: true });
+    const { existsSync, writeFileSync, mkdirSync } = require("fs");
+    const { configDir, configFile } = getConfigPaths();
+    if (!existsSync(configDir)) {
+      mkdirSync(configDir, { recursive: true });
     }
-    writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf8");
+    writeFileSync(configFile, JSON.stringify(config, null, 2), "utf8");
   } catch {
     // Silently fail
   }
-}
-
-// Types for OpenCode session and message data
-interface TokenUsage {
-  promptTokens?: number;
-  completionTokens?: number;
-  cost?: number;
-}
-
-// Message content part types
-interface TextPart {
-  type: "text";
-  text: string;
-}
-
-interface ToolCallPart {
-  type: "tool_use" | "tool-call";
-  name: string;
-  input?: Record<string, unknown>;
-  args?: Record<string, unknown>;
-}
-
-interface ToolResultPart {
-  type: "tool_result" | "tool-result";
-  content?: unknown;
-  result?: unknown;
-}
-
-interface GenericPart {
-  type: string;
-  [key: string]: unknown;
-}
-
-type MessagePart = TextPart | ToolCallPart | ToolResultPart | GenericPart;
-type MessageContent = string | MessagePart[];
-
-// Extracted part for storage
-interface ExtractedPart {
-  type: string;
-  content: string | Record<string, unknown>;
-}
-
-// OpenCode message structure
-interface OpenCodeMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: MessageContent;
-  model?: string;
-  usage?: TokenUsage;
-  duration?: number;
-  status?: "pending" | "streaming" | "completed" | "error";
-}
-
-// OpenCode session structure
-interface OpenCodeSession {
-  id: string;
-  title?: string;
-  cwd?: string;
-  model?: string;
-  provider?: string;
-  usage?: TokenUsage;
-  messages?: OpenCodeMessage[];
 }
 
 // Config getters/setters for CLI
@@ -156,136 +58,54 @@ export function setConfig(cfg: Config): void {
 
 export function clearConfig(): void {
   try {
-    if (existsSync(CONFIG_FILE)) {
-      writeFileSync(CONFIG_FILE, "{}", "utf8");
+    const { existsSync, writeFileSync } = require("fs");
+    const { configFile } = getConfigPaths();
+    if (existsSync(configFile)) {
+      writeFileSync(configFile, "{}", "utf8");
     }
   } catch {
     // Silently fail
   }
 }
 
-// Get API key for authentication
-function getApiKey(): string | null {
-  const cfg = getConfig();
-  if (!cfg || !cfg.apiKey) return null;
-  return cfg.apiKey;
+// Types for message content
+type MessageContent = string | Array<{ type: string; text?: string; [key: string]: unknown }>;
+
+interface OpenCodeMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: MessageContent;
+  model?: string;
+  usage?: { promptTokens?: number; completionTokens?: number; cost?: number };
+  duration?: number;
+  status?: "pending" | "streaming" | "completed" | "error";
 }
 
-// Normalize URL to .site format for HTTP endpoints
-// Accepts both .convex.cloud and .convex.site formats
-function normalizeToSiteUrl(url: string): string {
-  if (url.includes(".convex.cloud")) {
-    return url.replace(".convex.cloud", ".convex.site");
+interface OpenCodeSession {
+  id: string;
+  title?: string;
+  cwd?: string;
+  model?: string;
+  provider?: string;
+  usage?: { promptTokens?: number; completionTokens?: number; cost?: number };
+  messages?: OpenCodeMessage[];
+}
+
+// Track synced items to avoid duplicates
+const syncedMessages = new Set<string>();
+const syncedSessions = new Set<string>();
+
+function extractTextContent(content: MessageContent): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((p) => p.type === "text" && p.text)
+      .map((p) => p.text)
+      .join("\n");
   }
-  // Already .site or other format, return as-is
-  return url;
+  return "";
 }
 
-// Get site URL for API calls
-function getSiteUrl(): string | null {
-  const cfg = getConfig();
-  if (!cfg || !cfg.convexUrl) return null;
-  return normalizeToSiteUrl(cfg.convexUrl);
-}
-
-// Sync session data to backend
-async function syncSession(session: OpenCodeSession, client: PluginClient) {
-  const apiKey = getApiKey();
-  const siteUrl = getSiteUrl();
-
-  if (!apiKey || !siteUrl) {
-    await safeLog(client, {
-      service: "opencode-sync",
-      level: "warn",
-      message: "Not authenticated. Run: opencode-sync login",
-    });
-    return;
-  }
-
-  try {
-    const response = await fetch(`${siteUrl}/sync/session`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        externalId: session.id,
-        title: session.title || extractTitle(session),
-        projectPath: session.cwd,
-        projectName: session.cwd?.split("/").pop(),
-        model: session.model,
-        provider: session.provider,
-        promptTokens: session.usage?.promptTokens || 0,
-        completionTokens: session.usage?.completionTokens || 0,
-        cost: session.usage?.cost || 0,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      await safeLog(client, {
-        service: "opencode-sync",
-        level: "error",
-        message: `Session sync failed: ${errorText}`,
-      });
-    }
-  } catch (e) {
-    await safeLog(client, {
-      service: "opencode-sync",
-      level: "error",
-      message: `Session sync error: ${e}`,
-    });
-  }
-}
-
-// Sync message data to backend
-async function syncMessage(sessionId: string, message: OpenCodeMessage, client: PluginClient) {
-  const apiKey = getApiKey();
-  const siteUrl = getSiteUrl();
-
-  if (!apiKey || !siteUrl) return;
-
-  const parts = extractParts(message.content);
-
-  try {
-    const response = await fetch(`${siteUrl}/sync/message`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        sessionExternalId: sessionId,
-        externalId: message.id,
-        role: message.role,
-        textContent: extractTextContent(message.content),
-        model: message.model,
-        promptTokens: message.usage?.promptTokens,
-        completionTokens: message.usage?.completionTokens,
-        durationMs: message.duration,
-        parts,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      await safeLog(client, {
-        service: "opencode-sync",
-        level: "error",
-        message: `Message sync failed: ${errorText}`,
-      });
-    }
-  } catch (e) {
-    await safeLog(client, {
-      service: "opencode-sync",
-      level: "error",
-      message: `Message sync error: ${e}`,
-    });
-  }
-}
-
-// Extract title from first user message
 function extractTitle(session: OpenCodeSession): string {
   const firstMessage = session.messages?.find((m) => m.role === "user");
   if (firstMessage) {
@@ -297,132 +117,108 @@ function extractTitle(session: OpenCodeSession): string {
   return "Untitled Session";
 }
 
-// Extract text from message content
-function extractTextContent(content: MessageContent): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((p): p is TextPart => p.type === "text")
-      .map((p) => p.text)
-      .join("\n");
-  }
-  return "";
+// Sync functions that run in background (don't await to avoid blocking)
+function syncSessionBackground(session: OpenCodeSession): void {
+  const config = getConfig();
+  if (!config?.apiKey || !config?.convexUrl) return;
+
+  const siteUrl = config.convexUrl.replace(".convex.cloud", ".convex.site");
+
+  fetch(`${siteUrl}/sync/session`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      externalId: session.id,
+      title: session.title || extractTitle(session),
+      projectPath: session.cwd,
+      projectName: session.cwd?.split("/").pop(),
+      model: session.model,
+      provider: session.provider,
+      promptTokens: session.usage?.promptTokens || 0,
+      completionTokens: session.usage?.completionTokens || 0,
+      cost: session.usage?.cost || 0,
+    }),
+  }).catch(() => {
+    // Silently fail
+  });
 }
 
-// Extract parts from message content for structured storage
-function extractParts(content: MessageContent): ExtractedPart[] {
-  if (typeof content === "string") {
-    return [{ type: "text", content }];
-  }
+function syncMessageBackground(sessionId: string, message: OpenCodeMessage): void {
+  const config = getConfig();
+  if (!config?.apiKey || !config?.convexUrl) return;
 
-  if (Array.isArray(content)) {
-    return content.map((part): ExtractedPart => {
-      if (part.type === "text") {
-        return { type: "text", content: (part as TextPart).text };
-      }
-      if (part.type === "tool_use" || part.type === "tool-call") {
-        const toolPart = part as ToolCallPart;
-        return {
-          type: "tool-call",
-          content: { name: toolPart.name, args: toolPart.input || toolPart.args || {} },
-        };
-      }
-      if (part.type === "tool_result" || part.type === "tool-result") {
-        const resultPart = part as ToolResultPart;
-        return {
-          type: "tool-result",
-          content: { result: resultPart.content || resultPart.result },
-        };
-      }
-      return { type: part.type, content: part as Record<string, unknown> };
-    });
-  }
+  const siteUrl = config.convexUrl.replace(".convex.cloud", ".convex.site");
 
-  return [];
+  fetch(`${siteUrl}/sync/message`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      sessionExternalId: sessionId,
+      externalId: message.id,
+      role: message.role,
+      textContent: extractTextContent(message.content),
+      model: message.model,
+      promptTokens: message.usage?.promptTokens,
+      completionTokens: message.usage?.completionTokens,
+      durationMs: message.duration,
+    }),
+  }).catch(() => {
+    // Silently fail
+  });
 }
-
-// Track synced messages to avoid duplicates
-const syncedMessages = new Set<string>();
-const syncedSessions = new Set<string>();
 
 /**
  * OpenCode Sync Plugin
  * Syncs sessions and messages to cloud storage via Convex backend
- * Authentication: API Key (osk_*) from OpenSync Settings page
  */
-export const OpenCodeSyncPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
-  const cfg = getConfig();
-  
-  if (!cfg || !cfg.apiKey) {
-    await safeLog(client, {
-      service: "opencode-sync",
-      level: "warn",
-      message: "Not configured. Run: opencode-sync login",
-    });
-  } else {
-    await safeLog(client, {
-      service: "opencode-sync",
-      level: "info",
-      message: "Plugin initialized",
-      extra: { directory, worktree },
-    });
-  }
+export const OpenCodeSyncPlugin = async (ctx: {
+  client: { app: { log: (entry: { service: string; level: string; message: string }) => Promise<void> } };
+  directory: string;
+  worktree: string;
+}) => {
+  // Log initialization (non-blocking)
+  ctx.client.app.log({
+    service: "opencode-sync",
+    level: "info",
+    message: "Plugin loaded",
+  }).catch(() => {});
 
   return {
-    // Handle all events via generic event handler
-    event: async ({ event }) => {
-      const props = event.properties as Record<string, unknown> | undefined;
+    event: async (input: { event: { type: string; properties?: Record<string, unknown> } }) => {
+      try {
+        const { event } = input;
+        const props = event.properties;
 
-      // Session created - sync initial session data
-      if (event.type === "session.created") {
-        const session = props as OpenCodeSession | undefined;
-        if (session?.id && !syncedSessions.has(session.id)) {
-          syncedSessions.add(session.id);
-          await syncSession(session, client);
-        }
-      }
-
-      // Session updated - sync updated session data
-      if (event.type === "session.updated") {
-        const session = props as OpenCodeSession | undefined;
-        if (session?.id) {
-          await syncSession(session, client);
-        }
-      }
-
-      // Session idle - final sync when session completes
-      if (event.type === "session.idle") {
-        const session = props as OpenCodeSession | undefined;
-        if (session?.id) {
-          await syncSession(session, client);
-        }
-      }
-
-      // Message updated - sync message data
-      if (event.type === "message.updated") {
-        const messageProps = props as { sessionId?: string; message?: OpenCodeMessage } | undefined;
-        const sessionId = messageProps?.sessionId;
-        const message = messageProps?.message;
-        if (sessionId && message?.id && !syncedMessages.has(message.id)) {
-          syncedMessages.add(message.id);
-          await syncMessage(sessionId, message, client);
-        }
-      }
-
-      // Message part updated - sync partial message updates
-      if (event.type === "message.part.updated") {
-        const messageProps = props as { sessionId?: string; message?: OpenCodeMessage } | undefined;
-        const sessionId = messageProps?.sessionId;
-        const message = messageProps?.message;
-        if (sessionId && message?.id) {
-          // Only sync completed messages (not streaming)
-          if (message.status === "completed" || message.role === "user") {
-            if (!syncedMessages.has(message.id)) {
-              syncedMessages.add(message.id);
-              await syncMessage(sessionId, message, client);
-            }
+        if (event.type === "session.created" || event.type === "session.updated" || event.type === "session.idle") {
+          const session = props as OpenCodeSession | undefined;
+          if (session?.id) {
+            if (event.type === "session.created" && syncedSessions.has(session.id)) return;
+            if (event.type === "session.created") syncedSessions.add(session.id);
+            syncSessionBackground(session);
           }
         }
+
+        if (event.type === "message.updated" || event.type === "message.part.updated") {
+          const messageProps = props as { sessionId?: string; message?: OpenCodeMessage } | undefined;
+          const sessionId = messageProps?.sessionId;
+          const message = messageProps?.message;
+          
+          if (sessionId && message?.id && !syncedMessages.has(message.id)) {
+            if (event.type === "message.part.updated" && message.status !== "completed" && message.role !== "user") {
+              return;
+            }
+            syncedMessages.add(message.id);
+            syncMessageBackground(sessionId, message);
+          }
+        }
+      } catch {
+        // Silently fail to avoid crashing OpenCode
       }
     },
   };
