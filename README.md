@@ -116,6 +116,8 @@ Data is stored in your Convex deployment. You can view, search, and share sessio
 |---------|-------------|
 | `opencode-sync login` | Configure with Convex URL and API Key |
 | `opencode-sync verify` | Verify credentials and OpenCode config |
+| `opencode-sync sync` | Test connectivity and create a test session |
+| `opencode-sync sync --all` | Sync all local OpenCode sessions to the cloud |
 | `opencode-sync logout` | Clear stored credentials |
 | `opencode-sync status` | Show authentication status |
 | `opencode-sync config` | Show current configuration |

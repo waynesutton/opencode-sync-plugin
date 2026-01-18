@@ -4,10 +4,25 @@ import {
   getConfig,
   setConfig,
   clearConfig,
-} from "./index.js";
-import { readFileSync, existsSync } from "fs";
+} from "./config.js";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
+import { createInterface } from "readline";
+import { fileURLToPath } from "url";
+
+// Get package version
+function getVersion(): string {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const pkgPath = join(__dirname, "..", "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    return pkg.version || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -28,6 +43,19 @@ async function main() {
       break;
     case "config":
       showConfig();
+      break;
+    case "sync":
+      await sync();
+      break;
+    case "version":
+    case "-v":
+    case "--version":
+      console.log(`opencode-sync-plugin v${getVersion()}`);
+      break;
+    case "help":
+    case "-h":
+    case "--help":
+      help();
       break;
     default:
       help();
@@ -222,19 +250,322 @@ function showConfig() {
   console.log();
 }
 
+// OpenCode session type
+interface OpenCodeLocalSession {
+  id: string;
+  slug?: string;
+  version?: string;
+  projectID?: string;
+  directory?: string;
+  title?: string;
+  time?: { created?: number; updated?: number };
+  summary?: { additions?: number; deletions?: number; files?: number };
+}
+
+// OpenCode message type
+interface OpenCodeLocalMessage {
+  id: string;
+  sessionID: string;
+  role: string;
+  time?: { created?: number; completed?: number };
+  modelID?: string;
+  providerID?: string;
+  cost?: number;
+  tokens?: { input?: number; output?: number; reasoning?: number };
+}
+
+// Test sync connectivity and optionally sync all local sessions
+async function sync() {
+  const syncAll = args.includes("--all");
+
+  const config = getConfig();
+  if (!config || !config.apiKey || !config.convexUrl) {
+    console.log("\n  Status: Not configured\n");
+    console.log("  Run: opencode-sync login\n");
+    return;
+  }
+
+  const siteUrl = config.convexUrl.replace(".convex.cloud", ".convex.site");
+
+  if (syncAll) {
+    await syncAllSessions(siteUrl, config.apiKey);
+  } else {
+    await syncConnectivityTest(siteUrl, config.apiKey);
+  }
+}
+
+// Test connectivity with a test session
+async function syncConnectivityTest(siteUrl: string, apiKey: string) {
+  console.log("\n  OpenSync Connectivity Test\n");
+
+  // Test health endpoint
+  console.log("  Testing backend health...");
+  try {
+    const healthRes = await fetch(`${siteUrl}/health`);
+    if (healthRes.ok) {
+      const healthData = await healthRes.json();
+      console.log("  Health: OK");
+      console.log("  Response:", JSON.stringify(healthData));
+    } else {
+      console.log("  Health: FAILED");
+      console.log("  Status:", healthRes.status);
+      return;
+    }
+  } catch (e) {
+    console.log("  Health: FAILED");
+    console.log("  Error:", e instanceof Error ? e.message : String(e));
+    return;
+  }
+
+  console.log();
+
+  // Test sync endpoint with a test session
+  console.log("  Testing sync endpoint...");
+  const testSessionId = `test-${Date.now()}`;
+  try {
+    const syncRes = await fetch(`${siteUrl}/sync/session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        externalId: testSessionId,
+        title: "CLI Sync Test",
+        projectPath: process.cwd(),
+        projectName: process.cwd().split("/").pop(),
+        model: "test",
+        provider: "opencode-sync-cli",
+        promptTokens: 0,
+        completionTokens: 0,
+        cost: 0,
+      }),
+    });
+
+    if (syncRes.ok) {
+      const syncData = await syncRes.json();
+      console.log("  Sync: OK");
+      console.log("  Response:", JSON.stringify(syncData));
+      console.log();
+      console.log("  Test session created. Check your OpenSync dashboard.\n");
+    } else {
+      console.log("  Sync: FAILED");
+      console.log("  Status:", syncRes.status);
+      const text = await syncRes.text();
+      if (text) console.log("  Body:", text);
+      console.log();
+    }
+  } catch (e) {
+    console.log("  Sync: FAILED");
+    console.log("  Error:", e instanceof Error ? e.message : String(e));
+    console.log();
+  }
+}
+
+// Sync all local OpenCode sessions to the backend
+async function syncAllSessions(siteUrl: string, apiKey: string) {
+  console.log("\n  OpenSync: Syncing All Local Sessions\n");
+
+  const opencodePath = join(homedir(), ".local", "share", "opencode", "storage");
+  const sessionPath = join(opencodePath, "session");
+  const messagePath = join(opencodePath, "message");
+
+  if (!existsSync(sessionPath)) {
+    console.log("  No OpenCode sessions found.");
+    console.log("  Expected path:", sessionPath);
+    console.log();
+    return;
+  }
+
+  // Collect all session files from all project directories
+  const sessions: Array<{ file: string; data: OpenCodeLocalSession }> = [];
+
+  try {
+    const projectDirs = readdirSync(sessionPath, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+
+    for (const projectDir of projectDirs) {
+      const projectSessionPath = join(sessionPath, projectDir);
+      const sessionFiles = readdirSync(projectSessionPath)
+        .filter((f) => f.endsWith(".json"));
+
+      for (const file of sessionFiles) {
+        try {
+          const content = readFileSync(join(projectSessionPath, file), "utf8");
+          const data = JSON.parse(content) as OpenCodeLocalSession;
+          if (data.id) {
+            sessions.push({ file, data });
+          }
+        } catch {
+          // Skip invalid files
+        }
+      }
+    }
+  } catch (e) {
+    console.log("  Error reading sessions:", e instanceof Error ? e.message : String(e));
+    return;
+  }
+
+  console.log(`  Found ${sessions.length} sessions\n`);
+
+  if (sessions.length === 0) {
+    return;
+  }
+
+  let syncedSessions = 0;
+  let syncedMessages = 0;
+  let failedSessions = 0;
+
+  for (const session of sessions) {
+    const { data } = session;
+    process.stdout.write(`  Syncing: ${data.title || data.slug || data.id}... `);
+
+    // Calculate total tokens and cost from messages
+    let totalPromptTokens = 0;
+    let totalCompletionTokens = 0;
+    let totalCost = 0;
+    let model = "";
+    let provider = "";
+
+    // Read messages for this session
+    const sessionMessagePath = join(messagePath, data.id);
+    const messages: OpenCodeLocalMessage[] = [];
+
+    if (existsSync(sessionMessagePath)) {
+      try {
+        const messageFiles = readdirSync(sessionMessagePath)
+          .filter((f) => f.endsWith(".json"));
+
+        for (const msgFile of messageFiles) {
+          try {
+            const msgContent = readFileSync(join(sessionMessagePath, msgFile), "utf8");
+            const msgData = JSON.parse(msgContent) as OpenCodeLocalMessage;
+            if (msgData.id && msgData.sessionID === data.id) {
+              messages.push(msgData);
+
+              // Aggregate tokens and cost
+              if (msgData.tokens) {
+                totalPromptTokens += msgData.tokens.input || 0;
+                totalCompletionTokens += msgData.tokens.output || 0;
+              }
+              if (msgData.cost) {
+                totalCost += msgData.cost;
+              }
+              if (msgData.modelID && !model) {
+                model = msgData.modelID;
+              }
+              if (msgData.providerID && !provider) {
+                provider = msgData.providerID;
+              }
+            }
+          } catch {
+            // Skip invalid message files
+          }
+        }
+      } catch {
+        // No messages directory
+      }
+    }
+
+    // Sync the session
+    try {
+      const sessionRes = await fetch(`${siteUrl}/sync/session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          externalId: data.id,
+          title: data.title || data.slug || "Untitled",
+          projectPath: data.directory,
+          projectName: data.directory?.split("/").pop(),
+          model: model || "unknown",
+          provider: provider || "opencode",
+          promptTokens: totalPromptTokens,
+          completionTokens: totalCompletionTokens,
+          cost: totalCost,
+        }),
+      });
+
+      if (!sessionRes.ok) {
+        console.log("FAILED");
+        failedSessions++;
+        continue;
+      }
+
+      syncedSessions++;
+
+      // Sync messages
+      let msgCount = 0;
+      for (const msg of messages) {
+        try {
+          const msgRes = await fetch(`${siteUrl}/sync/message`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              sessionExternalId: data.id,
+              externalId: msg.id,
+              role: msg.role,
+              textContent: "", // We don't have content in the message metadata files
+              model: msg.modelID,
+              promptTokens: msg.tokens?.input,
+              completionTokens: msg.tokens?.output,
+              durationMs: msg.time?.completed && msg.time?.created
+                ? msg.time.completed - msg.time.created
+                : undefined,
+            }),
+          });
+
+          if (msgRes.ok) {
+            msgCount++;
+            syncedMessages++;
+          }
+        } catch {
+          // Skip failed messages
+        }
+      }
+
+      console.log(`OK (${msgCount} messages)`);
+    } catch (e) {
+      console.log("FAILED");
+      failedSessions++;
+    }
+  }
+
+  console.log();
+  console.log(`  Summary:`);
+  console.log(`    Sessions synced: ${syncedSessions}`);
+  console.log(`    Messages synced: ${syncedMessages}`);
+  if (failedSessions > 0) {
+    console.log(`    Failed: ${failedSessions}`);
+  }
+  console.log();
+  console.log("  Check your OpenSync dashboard to view synced sessions.\n");
+}
+
 // Show help
 function help() {
+  const version = getVersion();
   console.log(`
-  OpenSync CLI
+  OpenSync CLI v${version}
 
-  Usage: opencode-sync <command>
+  Usage: opencode-sync <command> [options]
 
   Commands:
-    login   Configure with Convex URL and API Key
-    verify  Verify credentials and OpenCode config
-    logout  Clear stored credentials
-    status  Show current authentication status
-    config  Show current configuration
+    login        Configure with Convex URL and API Key
+    verify       Verify credentials and OpenCode config
+    sync         Test connectivity and create a test session
+    sync --all   Sync all local OpenCode sessions to the cloud
+    logout       Clear stored credentials
+    status       Show current authentication status
+    config       Show current configuration
+    version      Show version number
+    help         Show this help message
 
   Setup:
     1. Go to your OpenSync dashboard Settings page
@@ -243,19 +574,21 @@ function help() {
     4. Enter your Convex URL and API Key
     5. Add plugin to opencode.json (see instructions after login)
     6. Run: opencode-sync verify
+    7. Run: opencode-sync sync (to test connectivity)
+    8. Run: opencode-sync sync --all (to sync existing sessions)
 `);
 }
 
-// Simple prompt helper
+// Simple prompt helper using readline
 function prompt(question: string): Promise<string> {
   return new Promise((resolve) => {
-    process.stdout.write(question);
-    
-    let input = "";
-    process.stdin.setEncoding("utf8");
-    process.stdin.once("data", (data) => {
-      input = data.toString().trim();
-      resolve(input);
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    rl.question(question, (answer: string) => {
+      rl.close();
+      resolve(answer.trim());
     });
   });
 }
