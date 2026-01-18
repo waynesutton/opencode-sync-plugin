@@ -27,7 +27,7 @@ npm run build
 
 ### 1. Get your credentials
 
-You need two things from your OpenSync deployment:
+You need two things from your OpenSync deployment
 
 - **Convex URL**: Your deployment URL from the Convex dashboard (e.g., `https://your-project-123.convex.cloud`)
 - **API Key**: Generated in the OpenSync dashboard at **Settings > API Key** (starts with `osk_`)
