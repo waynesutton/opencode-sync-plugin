@@ -39,6 +39,23 @@ interface Config {
   apiKey: string;
 }
 
+// Safe logger to avoid hard crashes during plugin init
+async function safeLog(
+  client: PluginClient | null | undefined,
+  entry: {
+    service: string;
+    level: "debug" | "info" | "warn" | "error";
+    message: string;
+    extra?: Record<string, unknown>;
+  },
+): Promise<void> {
+  try {
+    await client?.app?.log?.(entry);
+  } catch {
+    // Ignore log failures to keep OpenCode stable
+  }
+}
+
 // Simple file-based config (compatible with Bun)
 const CONFIG_DIR = join(homedir(), ".config", "opencode-sync");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
@@ -177,7 +194,7 @@ async function syncSession(session: OpenCodeSession, client: PluginClient) {
   const siteUrl = getSiteUrl();
 
   if (!apiKey || !siteUrl) {
-    await client.app.log({
+    await safeLog(client, {
       service: "opencode-sync",
       level: "warn",
       message: "Not authenticated. Run: opencode-sync login",
@@ -207,14 +224,14 @@ async function syncSession(session: OpenCodeSession, client: PluginClient) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      await client.app.log({
+      await safeLog(client, {
         service: "opencode-sync",
         level: "error",
         message: `Session sync failed: ${errorText}`,
       });
     }
   } catch (e) {
-    await client.app.log({
+    await safeLog(client, {
       service: "opencode-sync",
       level: "error",
       message: `Session sync error: ${e}`,
@@ -253,14 +270,14 @@ async function syncMessage(sessionId: string, message: OpenCodeMessage, client: 
 
     if (!response.ok) {
       const errorText = await response.text();
-      await client.app.log({
+      await safeLog(client, {
         service: "opencode-sync",
         level: "error",
         message: `Message sync failed: ${errorText}`,
       });
     }
   } catch (e) {
-    await client.app.log({
+    await safeLog(client, {
       service: "opencode-sync",
       level: "error",
       message: `Message sync error: ${e}`,
@@ -337,13 +354,13 @@ export const OpenCodeSyncPlugin: Plugin = async ({ project, client, $, directory
   const cfg = getConfig();
   
   if (!cfg || !cfg.apiKey) {
-    await client.app.log({
+    await safeLog(client, {
       service: "opencode-sync",
       level: "warn",
       message: "Not configured. Run: opencode-sync login",
     });
   } else {
-    await client.app.log({
+    await safeLog(client, {
       service: "opencode-sync",
       level: "info",
       message: "Plugin initialized",
@@ -410,3 +427,5 @@ export const OpenCodeSyncPlugin: Plugin = async ({ project, client, $, directory
     },
   };
 };
+
+export default OpenCodeSyncPlugin;

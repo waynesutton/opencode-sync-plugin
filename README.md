@@ -158,6 +158,8 @@ export const OpenCodeSyncPlugin: Plugin = async ({ project, client, $, directory
 };
 ```
 
+This plugin exports both a named and default export so OpenCode can load it from npm reliably.
+
 ## Troubleshooting
 
 ### OpenCode won't start or shows blank screen
@@ -188,6 +190,8 @@ rm -rf ~/.cache/opencode/node_modules/opencode-sync-plugin
 ```bash
 opencode
 ```
+
+If the issue persists, reinstall the latest version and clear the cache again.
 
 ### "Not authenticated" errors
 
