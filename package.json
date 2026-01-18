@@ -1,6 +1,6 @@
 {
   "name": "opencode-sync-plugin",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Sync your OpenCode sessions to the cloud",
   "type": "module",
   "main": "dist/index.js",
@@ -35,9 +35,6 @@
     "url": "https://github.com/waynesutton/opencode-sync-plugin"
   },
   "license": "MIT",
-  "dependencies": {
-    "conf": "^12.0.0"
-  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "tsup": "^8.0.0",

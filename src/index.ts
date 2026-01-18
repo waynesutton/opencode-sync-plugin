@@ -1,6 +1,6 @@
-import Conf from "conf";
 import { homedir } from "os";
 import { join } from "path";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 
 // OpenCode plugin types (inline to avoid strict dependency on @opencode-ai/plugin)
 interface PluginClient {
@@ -39,18 +39,29 @@ interface Config {
   apiKey: string;
 }
 
-// Lazy-loaded config to avoid blocking module initialization
-let _config: Conf<Config> | null = null;
+// Simple file-based config (compatible with Bun)
+const CONFIG_DIR = join(homedir(), ".config", "opencode-sync");
+const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 
-function getConfInstance(): Conf<Config> {
-  if (!_config) {
-    _config = new Conf<Config>({
-      projectName: "opencode-sync",
-      cwd: join(homedir(), ".config", "opencode-sync"),
-      configName: "config",
-    });
+function readConfigFile(): Config | null {
+  try {
+    if (!existsSync(CONFIG_FILE)) return null;
+    const content = readFileSync(CONFIG_FILE, "utf8");
+    return JSON.parse(content) as Config;
+  } catch {
+    return null;
   }
-  return _config;
+}
+
+function writeConfigFile(config: Config): void {
+  try {
+    if (!existsSync(CONFIG_DIR)) {
+      mkdirSync(CONFIG_DIR, { recursive: true });
+    }
+    writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf8");
+  } catch {
+    // Silently fail
+  }
 }
 
 // Types for OpenCode session and message data
@@ -117,22 +128,23 @@ interface OpenCodeSession {
 
 // Config getters/setters for CLI
 export function getConfig(): Config | null {
-  const conf = getConfInstance();
-  const url = conf.get("convexUrl");
-  const key = conf.get("apiKey");
-  if (!url) return null;
-  return { convexUrl: url, apiKey: key || "" };
+  const config = readConfigFile();
+  if (!config || !config.convexUrl) return null;
+  return config;
 }
 
-export function setConfig(cfg: Config) {
-  const conf = getConfInstance();
-  conf.set("convexUrl", cfg.convexUrl);
-  conf.set("apiKey", cfg.apiKey);
+export function setConfig(cfg: Config): void {
+  writeConfigFile(cfg);
 }
 
-export function clearConfig() {
-  const conf = getConfInstance();
-  conf.clear();
+export function clearConfig(): void {
+  try {
+    if (existsSync(CONFIG_FILE)) {
+      writeFileSync(CONFIG_FILE, "{}", "utf8");
+    }
+  } catch {
+    // Silently fail
+  }
 }
 
 // Get API key for authentication
