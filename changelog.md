@@ -4,6 +4,16 @@ All notable changes to opencode-sync-plugin.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0] - 2026-01-18
+
+### Removed
+- All console logging from plugin (completely silent operation in OpenCode)
+- `config --logging` CLI option (no longer needed)
+
+### Changed
+- Plugin now operates silently with no terminal output
+- Simplified config.ts by removing logging-related functions
+
 ## [0.2.8] - 2026-01-18
 
 ### Added

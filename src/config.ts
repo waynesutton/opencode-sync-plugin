@@ -81,7 +81,11 @@ export function addSyncedSessions(sessionIds: string[]): void {
 export function clearSyncedSessions(): void {
   try {
     if (existsSync(SYNCED_SESSIONS_FILE)) {
-      writeFileSync(SYNCED_SESSIONS_FILE, JSON.stringify({ sessionIds: [], lastUpdated: Date.now() }), "utf8");
+      writeFileSync(
+        SYNCED_SESSIONS_FILE,
+        JSON.stringify({ sessionIds: [], lastUpdated: Date.now() }),
+        "utf8",
+      );
     }
   } catch (e) {
     console.error("Error clearing synced sessions:", e);

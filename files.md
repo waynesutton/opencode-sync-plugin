@@ -16,9 +16,9 @@ Brief description of each file in the opencode-sync-plugin codebase.
 
 | File | Description |
 |------|-------------|
-| `index.ts` | OpenCode plugin that syncs sessions and messages to Convex backend via events |
-| `cli.ts` | CLI tool for login, verify, sync, status, config, logout commands |
-| `config.ts` | Config helpers to read/write credentials from `~/.opensync/credentials.json` |
+| `index.ts` | OpenCode plugin that silently syncs sessions and messages to Convex backend via events |
+| `cli.ts` | CLI tool for login, verify, sync, status, config, logout, version commands |
+| `config.ts` | Config helpers for credentials (`~/.opensync/credentials.json`) and sync tracking (`synced-sessions.json`) |
 
 ## dist/ (generated)
 

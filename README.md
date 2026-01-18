@@ -123,6 +123,8 @@ Data is stored in your Convex deployment. You can view, search, and share sessio
 | `opencode-sync logout` | Clear stored credentials |
 | `opencode-sync status` | Show authentication status |
 | `opencode-sync config` | Show current configuration |
+| `opencode-sync version` | Show installed version |
+| `opencode-sync help` | Show help message |
 
 ## Configuration storage
 

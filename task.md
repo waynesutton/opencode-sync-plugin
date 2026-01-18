@@ -16,9 +16,13 @@ Completed tasks for opencode-sync-plugin.
 - [x] Add `sync --all` command to bulk import local OpenCode sessions
 - [x] Type-safe interfaces for local session and message formats
 - [x] Documentation updates for new sync commands
+- [x] Add `sync --new` command with local tracking
+- [x] Add `sync --force` command to clear tracking and resync
+- [x] Backend query for existing sessions with `sync --all`
+- [x] Debounced message syncing and role inference
+- [x] Remove all console logging from plugin for silent operation
 
 ## Pending
 
-- [ ] Add verbose logging flag for debugging
 - [ ] Add session filtering by date range
 - [ ] Add dry-run mode for sync --all

@@ -45,7 +45,7 @@ async function main() {
       status();
       break;
     case "config":
-      showConfig();
+      handleConfig();
       break;
     case "sync":
       await sync();
@@ -70,20 +70,29 @@ async function login() {
   console.log("\n  OpenSync Login\n");
 
   // Get Convex URL
-  const convexUrl = await prompt("Convex URL (e.g., https://your-project.convex.cloud): ");
+  const convexUrl = await prompt(
+    "Convex URL (e.g., https://your-project.convex.cloud): ",
+  );
   if (!convexUrl) {
     console.error("Convex URL is required");
     process.exit(1);
   }
 
   // Validate URL format
-  if (!convexUrl.includes(".convex.cloud") && !convexUrl.includes(".convex.site")) {
-    console.error("Invalid Convex URL. Should end with .convex.cloud or .convex.site");
+  if (
+    !convexUrl.includes(".convex.cloud") &&
+    !convexUrl.includes(".convex.site")
+  ) {
+    console.error(
+      "Invalid Convex URL. Should end with .convex.cloud or .convex.site",
+    );
     process.exit(1);
   }
 
   // Get API Key
-  const apiKey = await prompt("API Key (from Settings page, starts with osk_): ");
+  const apiKey = await prompt(
+    "API Key (from Settings page, starts with osk_): ",
+  );
   if (!apiKey) {
     console.error("API Key is required");
     process.exit(1);
@@ -97,12 +106,12 @@ async function login() {
 
   // Test the API key by making a request to the health endpoint
   const siteUrl = convexUrl.replace(".convex.cloud", ".convex.site");
-  
+
   console.log("\nVerifying credentials...");
-  
+
   try {
     const response = await fetch(`${siteUrl}/health`);
-    
+
     if (!response.ok) {
       console.error("\nFailed to connect to OpenSync backend.");
       console.error("Please verify your Convex URL is correct.");
@@ -123,8 +132,12 @@ async function login() {
   }' > ~/.config/opencode/opencode.json`);
     console.log("\n  Then verify your setup:\n");
     console.log("  opencode-sync verify\n");
-    console.log("  Note: If you have existing opencode.json settings, manually add");
-    console.log('  "plugin": ["opencode-sync-plugin"] to preserve your config.\n');
+    console.log(
+      "  Note: If you have existing opencode.json settings, manually add",
+    );
+    console.log(
+      '  "plugin": ["opencode-sync-plugin"] to preserve your config.\n',
+    );
   } catch (e) {
     console.error("\nFailed to connect to OpenSync backend.");
     console.error("Please verify your Convex URL is correct.");
@@ -141,9 +154,9 @@ function logout() {
 // Verify credentials and OpenCode config
 function verify() {
   console.log("\n  OpenSync Setup Verification\n");
-  
+
   let hasErrors = false;
-  
+
   // Check credentials
   const config = getConfig();
   if (!config || !config.apiKey) {
@@ -153,18 +166,26 @@ function verify() {
   } else {
     console.log("  Credentials: OK");
     console.log("  Convex URL:", config.convexUrl);
-    console.log("  API Key:", config.apiKey.slice(0, 8) + "..." + config.apiKey.slice(-4));
+    console.log(
+      "  API Key:",
+      config.apiKey.slice(0, 8) + "..." + config.apiKey.slice(-4),
+    );
     console.log();
   }
-  
+
   // Check OpenCode config file
-  const opencodeConfigPath = join(homedir(), ".config", "opencode", "opencode.json");
+  const opencodeConfigPath = join(
+    homedir(),
+    ".config",
+    "opencode",
+    "opencode.json",
+  );
   const projectConfigPath = join(process.cwd(), "opencode.json");
-  
+
   let configFound = false;
   let configPath = "";
   let pluginRegistered = false;
-  
+
   // Check global config first, then project config
   for (const path of [opencodeConfigPath, projectConfigPath]) {
     if (existsSync(path)) {
@@ -173,7 +194,11 @@ function verify() {
       try {
         const content = readFileSync(path, "utf8");
         const parsed = JSON.parse(content);
-        if (parsed.plugin && Array.isArray(parsed.plugin) && parsed.plugin.includes("opencode-sync-plugin")) {
+        if (
+          parsed.plugin &&
+          Array.isArray(parsed.plugin) &&
+          parsed.plugin.includes("opencode-sync-plugin")
+        ) {
           pluginRegistered = true;
           break;
         }
@@ -182,7 +207,7 @@ function verify() {
       }
     }
   }
-  
+
   if (!configFound) {
     console.log("  OpenCode Config: MISSING");
     console.log("  Run this command to create it:\n");
@@ -202,12 +227,16 @@ function verify() {
     console.log("  Plugin registered: opencode-sync-plugin");
     console.log();
   }
-  
+
   // Final status
   if (hasErrors) {
-    console.log("  Setup incomplete. Fix the issues above and run verify again.\n");
+    console.log(
+      "  Setup incomplete. Fix the issues above and run verify again.\n",
+    );
   } else {
-    console.log("  Ready! Start OpenCode and the plugin will load automatically.\n");
+    console.log(
+      "  Ready! Start OpenCode and the plugin will load automatically.\n",
+    );
   }
 }
 
@@ -232,24 +261,37 @@ function status() {
 
   console.log("  Status: Configured\n");
   console.log("  Convex URL:", config.convexUrl);
-  console.log("  API Key:", config.apiKey.slice(0, 8) + "..." + config.apiKey.slice(-4));
+  console.log(
+    "  API Key:",
+    config.apiKey.slice(0, 8) + "..." + config.apiKey.slice(-4),
+  );
   console.log();
+}
+
+// Handle config command
+function handleConfig() {
+  showConfig();
 }
 
 // Show current configuration
 function showConfig() {
   const config = getConfig();
-  
+
   console.log("\n  OpenSync Config\n");
-  
+
   if (!config) {
     console.log("  No configuration found.\n");
     console.log("  Run: opencode-sync login\n");
     return;
   }
-  
+
   console.log("  Convex URL:", config.convexUrl);
-  console.log("  API Key:", config.apiKey ? config.apiKey.slice(0, 8) + "..." + config.apiKey.slice(-4) : "Not set");
+  console.log(
+    "  API Key:",
+    config.apiKey
+      ? config.apiKey.slice(0, 8) + "..." + config.apiKey.slice(-4)
+      : "Not set",
+  );
   console.log();
 }
 
@@ -275,6 +317,41 @@ interface OpenCodeLocalMessage {
   providerID?: string;
   cost?: number;
   tokens?: { input?: number; output?: number; reasoning?: number };
+}
+
+// Read message text content from the part directory
+function getMessageTextContent(
+  partBasePath: string,
+  messageId: string,
+): string {
+  const messagePartPath = join(partBasePath, messageId);
+  if (!existsSync(messagePartPath)) {
+    return "";
+  }
+
+  try {
+    const partFiles = readdirSync(messagePartPath).filter((f) =>
+      f.endsWith(".json"),
+    );
+    let textContent = "";
+
+    for (const partFile of partFiles) {
+      try {
+        const partData = JSON.parse(
+          readFileSync(join(messagePartPath, partFile), "utf8"),
+        );
+        if (partData.type === "text" && partData.text) {
+          textContent += partData.text;
+        }
+      } catch {
+        // Skip invalid part files
+      }
+    }
+
+    return textContent;
+  } catch {
+    return "";
+  }
 }
 
 // Test sync connectivity and optionally sync local sessions
@@ -376,7 +453,10 @@ async function syncConnectivityTest(siteUrl: string, apiKey: string) {
 }
 
 // Fetch already-synced session IDs from the backend
-async function fetchBackendSessionIds(siteUrl: string, apiKey: string): Promise<Set<string>> {
+async function fetchBackendSessionIds(
+  siteUrl: string,
+  apiKey: string,
+): Promise<Set<string>> {
   try {
     const res = await fetch(`${siteUrl}/sync/sessions/list`, {
       method: "GET",
@@ -395,13 +475,29 @@ async function fetchBackendSessionIds(siteUrl: string, apiKey: string): Promise<
 }
 
 // Sync local OpenCode sessions to the backend
-async function syncAllSessions(siteUrl: string, apiKey: string, mode: "all" | "new" | "force") {
-  const modeLabel = mode === "force" ? "Force Syncing" : mode === "new" ? "Syncing New" : "Syncing All";
+async function syncAllSessions(
+  siteUrl: string,
+  apiKey: string,
+  mode: "all" | "new" | "force",
+) {
+  const modeLabel =
+    mode === "force"
+      ? "Force Syncing"
+      : mode === "new"
+        ? "Syncing New"
+        : "Syncing All";
   console.log(`\n  OpenSync: ${modeLabel} Local Sessions\n`);
 
-  const opencodePath = join(homedir(), ".local", "share", "opencode", "storage");
+  const opencodePath = join(
+    homedir(),
+    ".local",
+    "share",
+    "opencode",
+    "storage",
+  );
   const sessionPath = join(opencodePath, "session");
   const messagePath = join(opencodePath, "message");
+  const partPath = join(opencodePath, "part");
 
   if (!existsSync(sessionPath)) {
     console.log("  No OpenCode sessions found.");
@@ -420,8 +516,9 @@ async function syncAllSessions(siteUrl: string, apiKey: string, mode: "all" | "n
 
     for (const projectDir of projectDirs) {
       const projectSessionPath = join(sessionPath, projectDir);
-      const sessionFiles = readdirSync(projectSessionPath)
-        .filter((f) => f.endsWith(".json"));
+      const sessionFiles = readdirSync(projectSessionPath).filter((f) =>
+        f.endsWith(".json"),
+      );
 
       for (const file of sessionFiles) {
         try {
@@ -436,7 +533,10 @@ async function syncAllSessions(siteUrl: string, apiKey: string, mode: "all" | "n
       }
     }
   } catch (e) {
-    console.log("  Error reading sessions:", e instanceof Error ? e.message : String(e));
+    console.log(
+      "  Error reading sessions:",
+      e instanceof Error ? e.message : String(e),
+    );
     return;
   }
 
@@ -485,7 +585,9 @@ async function syncAllSessions(siteUrl: string, apiKey: string, mode: "all" | "n
 
   for (const session of sessionsToSync) {
     const { data } = session;
-    process.stdout.write(`  Syncing: ${data.title || data.slug || data.id}... `);
+    process.stdout.write(
+      `  Syncing: ${data.title || data.slug || data.id}... `,
+    );
 
     // Calculate total tokens and cost from messages
     let totalPromptTokens = 0;
@@ -500,12 +602,16 @@ async function syncAllSessions(siteUrl: string, apiKey: string, mode: "all" | "n
 
     if (existsSync(sessionMessagePath)) {
       try {
-        const messageFiles = readdirSync(sessionMessagePath)
-          .filter((f) => f.endsWith(".json"));
+        const messageFiles = readdirSync(sessionMessagePath).filter((f) =>
+          f.endsWith(".json"),
+        );
 
         for (const msgFile of messageFiles) {
           try {
-            const msgContent = readFileSync(join(sessionMessagePath, msgFile), "utf8");
+            const msgContent = readFileSync(
+              join(sessionMessagePath, msgFile),
+              "utf8",
+            );
             const msgData = JSON.parse(msgContent) as OpenCodeLocalMessage;
             if (msgData.id && msgData.sessionID === data.id) {
               messages.push(msgData);
@@ -568,6 +674,9 @@ async function syncAllSessions(siteUrl: string, apiKey: string, mode: "all" | "n
       let msgCount = 0;
       for (const msg of messages) {
         try {
+          // Get the actual message text content from the part directory
+          const textContent = getMessageTextContent(partPath, msg.id);
+
           const msgRes = await fetch(`${siteUrl}/sync/message`, {
             method: "POST",
             headers: {
@@ -578,13 +687,14 @@ async function syncAllSessions(siteUrl: string, apiKey: string, mode: "all" | "n
               sessionExternalId: data.id,
               externalId: msg.id,
               role: msg.role,
-              textContent: "", // We don't have content in the message metadata files
+              textContent,
               model: msg.modelID,
               promptTokens: msg.tokens?.input,
               completionTokens: msg.tokens?.output,
-              durationMs: msg.time?.completed && msg.time?.created
-                ? msg.time.completed - msg.time.created
-                : undefined,
+              durationMs:
+                msg.time?.completed && msg.time?.created
+                  ? msg.time.completed - msg.time.created
+                  : undefined,
             }),
           });
 
@@ -642,7 +752,7 @@ function help() {
     status        Show current authentication status
     config        Show current configuration
     version       Show version number
-    help         Show this help message
+    help          Show this help message
 
   Setup:
     1. Go to your OpenSync dashboard Settings page
