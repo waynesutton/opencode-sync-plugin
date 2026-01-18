@@ -39,6 +39,20 @@ interface Config {
   apiKey: string;
 }
 
+// Lazy-loaded config to avoid blocking module initialization
+let _config: Conf<Config> | null = null;
+
+function getConfInstance(): Conf<Config> {
+  if (!_config) {
+    _config = new Conf<Config>({
+      projectName: "opencode-sync",
+      cwd: join(homedir(), ".config", "opencode-sync"),
+      configName: "config",
+    });
+  }
+  return _config;
+}
+
 // Types for OpenCode session and message data
 interface TokenUsage {
   promptTokens?: number;
@@ -101,28 +115,24 @@ interface OpenCodeSession {
   messages?: OpenCodeMessage[];
 }
 
-// Config storage using conf package
-const config = new Conf<Config>({
-  projectName: "opencode-sync",
-  cwd: join(homedir(), ".config", "opencode-sync"),
-  configName: "config",
-});
-
 // Config getters/setters for CLI
 export function getConfig(): Config | null {
-  const url = config.get("convexUrl");
-  const key = config.get("apiKey");
+  const conf = getConfInstance();
+  const url = conf.get("convexUrl");
+  const key = conf.get("apiKey");
   if (!url) return null;
   return { convexUrl: url, apiKey: key || "" };
 }
 
 export function setConfig(cfg: Config) {
-  config.set("convexUrl", cfg.convexUrl);
-  config.set("apiKey", cfg.apiKey);
+  const conf = getConfInstance();
+  conf.set("convexUrl", cfg.convexUrl);
+  conf.set("apiKey", cfg.apiKey);
 }
 
 export function clearConfig() {
-  config.clear();
+  const conf = getConfInstance();
+  conf.clear();
 }
 
 // Get API key for authentication

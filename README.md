@@ -74,6 +74,28 @@ mkdir -p ~/.config/opencode && echo '{
 
 > **Note:** If you already have an `opencode.json` with other settings, edit the file manually and add `"plugin": ["opencode-sync-plugin"]` to preserve your existing configuration. OpenCode merges configs, so you can keep your theme, model, and other settings.
 
+### 4. Verify installation
+
+```bash
+opencode-sync verify
+```
+
+This checks that both your credentials and OpenCode config are set up correctly. You should see:
+
+```
+  OpenSync Setup Verification
+
+  Credentials: OK
+  Convex URL: https://your-project.convex.cloud
+  API Key: osk_****...****
+
+  OpenCode Config: OK
+  Config file: ~/.config/opencode/opencode.json
+  Plugin registered: opencode-sync-plugin
+
+  Ready! Start OpenCode and the plugin will load automatically.
+```
+
 ## How it works
 
 The plugin hooks into OpenCode events and syncs data automatically:
@@ -93,6 +115,7 @@ Data is stored in your Convex deployment. You can view, search, and share sessio
 | Command | Description |
 |---------|-------------|
 | `opencode-sync login` | Configure with Convex URL and API Key |
+| `opencode-sync verify` | Verify credentials and OpenCode config |
 | `opencode-sync logout` | Clear stored credentials |
 | `opencode-sync status` | Show authentication status |
 | `opencode-sync config` | Show current configuration |
@@ -136,6 +159,35 @@ export const OpenCodeSyncPlugin: Plugin = async ({ project, client, $, directory
 ```
 
 ## Troubleshooting
+
+### OpenCode won't start or shows blank screen
+
+If OpenCode hangs or shows a blank screen after adding the plugin, remove the plugin config:
+
+**Step 1: Open a new terminal window**
+
+**Step 2: Remove the plugin from your config**
+
+```bash
+# Option A: Delete the entire config (if you only have the plugin configured)
+rm ~/.config/opencode/opencode.json
+
+# Option B: Edit the file to remove the plugin line
+nano ~/.config/opencode/opencode.json
+# Remove the "plugin": ["opencode-sync-plugin"] line and save
+```
+
+**Step 3: Clear the plugin cache**
+
+```bash
+rm -rf ~/.cache/opencode/node_modules/opencode-sync-plugin
+```
+
+**Step 4: Restart OpenCode**
+
+```bash
+opencode
+```
 
 ### "Not authenticated" errors
 

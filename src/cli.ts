@@ -5,6 +5,9 @@ import {
   setConfig,
   clearConfig,
 } from "./index.js";
+import { readFileSync, existsSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -13,6 +16,9 @@ async function main() {
   switch (command) {
     case "login":
       await login();
+      break;
+    case "verify":
+      verify();
       break;
     case "logout":
       logout();
@@ -78,8 +84,16 @@ async function login() {
     console.log("\nLogin successful!\n");
     console.log("  Convex URL:", convexUrl);
     console.log("  API Key:", apiKey.slice(0, 8) + "..." + apiKey.slice(-4));
-    console.log("\n  Add the plugin to your opencode.json:");
-    console.log('  { "plugin": ["opencode-sync-plugin"] }\n');
+    console.log("\n  Next step: Add the plugin to OpenCode\n");
+    console.log("  Run this command (copy/paste into terminal):\n");
+    console.log(`  mkdir -p ~/.config/opencode && echo '{
+    "$schema": "https://opencode.ai/config.json",
+    "plugin": ["opencode-sync-plugin"]
+  }' > ~/.config/opencode/opencode.json`);
+    console.log("\n  Then verify your setup:\n");
+    console.log("  opencode-sync verify\n");
+    console.log("  Note: If you have existing opencode.json settings, manually add");
+    console.log('  "plugin": ["opencode-sync-plugin"] to preserve your config.\n');
   } catch (e) {
     console.error("\nFailed to connect to OpenSync backend.");
     console.error("Please verify your Convex URL is correct.");
@@ -91,6 +105,79 @@ async function login() {
 function logout() {
   clearConfig();
   console.log("\nLogged out successfully\n");
+}
+
+// Verify credentials and OpenCode config
+function verify() {
+  console.log("\n  OpenSync Setup Verification\n");
+  
+  let hasErrors = false;
+  
+  // Check credentials
+  const config = getConfig();
+  if (!config || !config.apiKey) {
+    console.log("  Credentials: MISSING");
+    console.log("  Run: opencode-sync login\n");
+    hasErrors = true;
+  } else {
+    console.log("  Credentials: OK");
+    console.log("  Convex URL:", config.convexUrl);
+    console.log("  API Key:", config.apiKey.slice(0, 8) + "..." + config.apiKey.slice(-4));
+    console.log();
+  }
+  
+  // Check OpenCode config file
+  const opencodeConfigPath = join(homedir(), ".config", "opencode", "opencode.json");
+  const projectConfigPath = join(process.cwd(), "opencode.json");
+  
+  let configFound = false;
+  let configPath = "";
+  let pluginRegistered = false;
+  
+  // Check global config first, then project config
+  for (const path of [opencodeConfigPath, projectConfigPath]) {
+    if (existsSync(path)) {
+      configFound = true;
+      configPath = path;
+      try {
+        const content = readFileSync(path, "utf8");
+        const parsed = JSON.parse(content);
+        if (parsed.plugin && Array.isArray(parsed.plugin) && parsed.plugin.includes("opencode-sync-plugin")) {
+          pluginRegistered = true;
+          break;
+        }
+      } catch {
+        // JSON parse error, continue checking
+      }
+    }
+  }
+  
+  if (!configFound) {
+    console.log("  OpenCode Config: MISSING");
+    console.log("  Run this command to create it:\n");
+    console.log(`  mkdir -p ~/.config/opencode && echo '{
+    "$schema": "https://opencode.ai/config.json",
+    "plugin": ["opencode-sync-plugin"]
+  }' > ~/.config/opencode/opencode.json\n`);
+    hasErrors = true;
+  } else if (!pluginRegistered) {
+    console.log("  OpenCode Config: FOUND but plugin not registered");
+    console.log("  Config file:", configPath);
+    console.log('  Add "plugin": ["opencode-sync-plugin"] to your config\n');
+    hasErrors = true;
+  } else {
+    console.log("  OpenCode Config: OK");
+    console.log("  Config file:", configPath);
+    console.log("  Plugin registered: opencode-sync-plugin");
+    console.log();
+  }
+  
+  // Final status
+  if (hasErrors) {
+    console.log("  Setup incomplete. Fix the issues above and run verify again.\n");
+  } else {
+    console.log("  Ready! Start OpenCode and the plugin will load automatically.\n");
+  }
 }
 
 // Show authentication status
@@ -144,6 +231,7 @@ function help() {
 
   Commands:
     login   Configure with Convex URL and API Key
+    verify  Verify credentials and OpenCode config
     logout  Clear stored credentials
     status  Show current authentication status
     config  Show current configuration
@@ -153,7 +241,8 @@ function help() {
     2. Generate an API Key (starts with osk_)
     3. Run: opencode-sync login
     4. Enter your Convex URL and API Key
-    5. Add plugin to opencode.json: { "plugin": ["opencode-sync-plugin"] }
+    5. Add plugin to opencode.json (see instructions after login)
+    6. Run: opencode-sync verify
 `);
 }
 
