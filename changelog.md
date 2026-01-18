@@ -4,6 +4,17 @@ All notable changes to opencode-sync-plugin.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.7] - 2026-01-18
+
+### Added
+- Debounced message syncing (800ms) to wait for streaming to complete
+- Role inference from message content when metadata unavailable
+- Memory cleanup after message sync to prevent leaks
+
+### Changed
+- Use official `@opencode-ai/plugin` types instead of inline definitions
+- Improved role detection for user vs assistant messages
+
 ## [0.2.6] - 2026-01-17
 
 ### Added
