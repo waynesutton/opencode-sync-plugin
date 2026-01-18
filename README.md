@@ -49,7 +49,16 @@ No browser authentication required.
 
 ### 3. Add to OpenCode
 
-Add the plugin to your `opencode.json`:
+**Quick setup (global config, works for all projects):**
+
+```bash
+mkdir -p ~/.config/opencode && echo '{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-sync-plugin"]
+}' > ~/.config/opencode/opencode.json
+```
+
+**Or manually add** to your `opencode.json`:
 
 ```json
 {
@@ -58,7 +67,12 @@ Add the plugin to your `opencode.json`:
 }
 ```
 
-Or add globally at `~/.config/opencode/opencode.json`.
+**Config locations:**
+
+- Global: `~/.config/opencode/opencode.json` (applies to all projects)
+- Per-project: `./opencode.json` in your project root
+
+> **Note:** If you already have an `opencode.json` with other settings, edit the file manually and add `"plugin": ["opencode-sync-plugin"]` to preserve your existing configuration. OpenCode merges configs, so you can keep your theme, model, and other settings.
 
 ## How it works
 
