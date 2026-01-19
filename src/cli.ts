@@ -91,7 +91,7 @@ async function login() {
 
   // Get API Key
   const apiKey = await prompt(
-    "API Key (from Settings page, starts with osk_): ",
+    "Get your API key from your OpenSync.dev Settings page, starts with osk_. Enter it here: ",
   );
   if (!apiKey) {
     console.error("API Key is required");

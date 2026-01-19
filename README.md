@@ -4,6 +4,14 @@ Sync your OpenCode sessions to the cloud. Search, share, and access your coding 
 
 [![npm version](https://img.shields.io/npm/v/opencode-sync-plugin.svg)](https://www.npmjs.com/package/opencode-sync-plugin)
 
+## OpenSync Ecosystem
+
+| Package | Description | Links |
+|---------|-------------|-------|
+| **OpenSync** | Beautiful dashboards for OpenCode and Claude Code sessions synced to the cloud. Track coding sessions, analyze tool usage, and monitor token consumption across projects. | [Website](https://opensync.dev/) / [GitHub](https://github.com/waynesutton/opensync) |
+| **opencode-sync-plugin** | Sync your OpenCode sessions to the OpenSync dashboard. | [GitHub](https://github.com/waynesutton/opencode-sync-plugin) / [npm](https://www.npmjs.com/package/opencode-sync-plugin) |
+| **claude-code-sync** | Sync your Claude Code sessions to the OpenSync dashboard. | [GitHub](https://github.com/waynesutton/claude-code-sync) / [npm](https://www.npmjs.com/package/claude-code-sync) |
+
 ## Installation
 
 ### From npm
@@ -168,6 +176,8 @@ This plugin exports both a named and default export so OpenCode can load it from
 
 ## Troubleshooting
 
+Having issues? [Open an issue on GitHub](https://github.com/waynesutton/opencode-sync-plugin/issues) and we'll help you out.
+
 ### OpenCode won't start or shows blank screen
 
 If OpenCode hangs or shows a blank screen after adding the plugin, remove the plugin config:
@@ -222,6 +232,10 @@ opencode-sync status
 
 Plugin logs are available in OpenCode's log output. Look for entries with `service: "opencode-sync"`.
 
+### Still having issues?
+
+If none of the above solutions work, [open an issue](https://github.com/waynesutton/opencode-sync-plugin/issues) with details about your setup and the error you're seeing.
+
 ## Development
 
 ```bash
@@ -234,6 +248,14 @@ npm run build
 # Watch mode
 npm run dev
 ```
+
+## Links
+
+- [OpenSync Dashboard](https://opensync.dev/)
+- [OpenSync GitHub](https://github.com/waynesutton/opensync)
+- [opencode-sync-plugin npm](https://www.npmjs.com/package/opencode-sync-plugin)
+- [claude-code-sync npm](https://www.npmjs.com/package/claude-code-sync)
+- [Report Issues](https://github.com/waynesutton/opencode-sync-plugin/issues)
 
 ## License
 
