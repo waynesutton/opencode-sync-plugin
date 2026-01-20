@@ -173,21 +173,24 @@ function verify() {
     console.log();
   }
 
-  // Check OpenCode config file
-  const opencodeConfigPath = join(
-    homedir(),
-    ".config",
-    "opencode",
-    "opencode.json",
-  );
-  const projectConfigPath = join(process.cwd(), "opencode.json");
+  // Check OpenCode config file (supports both .json and .jsonc)
+  const configDir = join(homedir(), ".config", "opencode");
+  const globalJsonConfig = join(configDir, "opencode.json");
+  const globalJsoncConfig = join(configDir, "opencode.jsonc");
+  const projectJsonConfig = join(process.cwd(), "opencode.json");
+  const projectJsoncConfig = join(process.cwd(), "opencode.jsonc");
 
   let configFound = false;
   let configPath = "";
   let pluginRegistered = false;
 
-  // Check global config first, then project config
-  for (const path of [opencodeConfigPath, projectConfigPath]) {
+  // Check global config first, then project config (both .json and .jsonc)
+  for (const path of [
+    globalJsonConfig,
+    globalJsoncConfig,
+    projectJsonConfig,
+    projectJsoncConfig,
+  ]) {
     if (existsSync(path)) {
       configFound = true;
       configPath = path;

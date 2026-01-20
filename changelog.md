@@ -4,6 +4,11 @@ All notable changes to opencode-sync-plugin.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.1] - 2026-01-19
+
+### Added
+- JSONC support in verify command (detects both .json and .jsonc config files)
+
 ## [0.3.0] - 2026-01-18
 
 ### Removed
