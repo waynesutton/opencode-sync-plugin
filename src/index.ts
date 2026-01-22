@@ -14,6 +14,18 @@ const messageMetadata = new Map<
   string,
   { role: string; sessionId: string; info: any }
 >();
+// Track session stats from messages (model, tokens, cost)
+const sessionStats = new Map<
+  string,
+  {
+    model?: string;
+    promptTokens: number;
+    completionTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+    cost: number;
+  }
+>();
 // Debounce map: messageId -> timeout
 const syncTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 const DEBOUNCE_MS = 800;
@@ -58,18 +70,30 @@ function doSyncSession(session: any) {
     }
     const url = config.convexUrl.replace(".convex.cloud", ".convex.site");
     const projectPath = session.path?.cwd || session.cwd || session.directory;
-    const modelId = session.modelID || session.model?.modelID || session.model;
+
+    // Get aggregated stats from messages if available
+    const stats = sessionStats.get(session.id);
+
+    // Use stats from messages, fall back to session data
+    const modelId = stats?.model || session.modelID || session.model?.modelID || session.model;
     const providerId =
       session.providerID || session.model?.providerID || session.provider;
-    const promptTokens =
+    const promptTokens = stats?.promptTokens ||
       session.tokens?.input || session.usage?.promptTokens || 0;
-    const completionTokens =
+    const completionTokens = stats?.completionTokens ||
       session.tokens?.output || session.usage?.completionTokens || 0;
-    const cacheCreationTokens =
+    const cacheCreationTokens = stats?.cacheCreationTokens ||
       session.tokens?.cache_creation || session.usage?.cacheCreationTokens || 0;
-    const cacheReadTokens =
+    const cacheReadTokens = stats?.cacheReadTokens ||
       session.tokens?.cache_read || session.usage?.cacheReadTokens || 0;
-    const cost = session.cost || session.usage?.cost || 0;
+    const cost = stats?.cost || session.cost || session.usage?.cost || 0;
+
+    // Calculate duration if timestamps available
+    let durationMs: number | undefined;
+    if (session.time?.created && session.time?.updated) {
+      durationMs = session.time.updated - session.time.created;
+    }
+
     fetch(`${url}/sync/session`, {
       method: "POST",
       headers: {
@@ -88,6 +112,7 @@ function doSyncSession(session: any) {
         cacheCreationTokens,
         cacheReadTokens,
         cost,
+        durationMs,
       }),
     }).catch(() => {});
   } catch {
@@ -218,6 +243,28 @@ export const OpenCodeSyncPlugin: Plugin = async () => {
             if (messagePartsText.has(info.id)) {
               scheduleSyncMessage(info.id);
             }
+            // Track session stats from messages
+            const sessionId = info.sessionID;
+            const existing = sessionStats.get(sessionId) || {
+              promptTokens: 0,
+              completionTokens: 0,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 0,
+              cost: 0,
+            };
+            if (info.modelID && !existing.model) {
+              existing.model = info.modelID;
+            }
+            if (info.tokens) {
+              existing.promptTokens += info.tokens.input || 0;
+              existing.completionTokens += info.tokens.output || 0;
+              existing.cacheCreationTokens += info.tokens.cache_creation || 0;
+              existing.cacheReadTokens += info.tokens.cache_read || 0;
+            }
+            if (info.cost) {
+              existing.cost += info.cost;
+            }
+            sessionStats.set(sessionId, existing);
           }
         }
         // Message parts (text, tool-call, tool-result)
