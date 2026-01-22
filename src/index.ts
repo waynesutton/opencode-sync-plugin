@@ -258,8 +258,9 @@ export const OpenCodeSyncPlugin: Plugin = async () => {
             if (info.tokens) {
               existing.promptTokens += info.tokens.input || 0;
               existing.completionTokens += info.tokens.output || 0;
-              existing.cacheCreationTokens += info.tokens.cache_creation || 0;
-              existing.cacheReadTokens += info.tokens.cache_read || 0;
+              // OpenCode uses tokens.cache.write/read, not cache_creation/cache_read
+              existing.cacheCreationTokens += info.tokens.cache?.write || info.tokens.cache_creation || 0;
+              existing.cacheReadTokens += info.tokens.cache?.read || info.tokens.cache_read || 0;
             }
             if (info.cost) {
               existing.cost += info.cost;

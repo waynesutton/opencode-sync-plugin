@@ -400,6 +400,7 @@ interface OpenCodeLocalMessage {
     reasoning?: number;
     cache_creation?: number;
     cache_read?: number;
+    cache?: { write?: number; read?: number };
   };
 }
 
@@ -724,8 +725,9 @@ async function syncAllSessions(
               if (msgData.tokens) {
                 totalPromptTokens += msgData.tokens.input || 0;
                 totalCompletionTokens += msgData.tokens.output || 0;
-                totalCacheCreationTokens += msgData.tokens.cache_creation || 0;
-                totalCacheReadTokens += msgData.tokens.cache_read || 0;
+                // OpenCode uses tokens.cache.write/read, not cache_creation/cache_read
+                totalCacheCreationTokens += msgData.tokens.cache?.write || msgData.tokens.cache_creation || 0;
+                totalCacheReadTokens += msgData.tokens.cache?.read || msgData.tokens.cache_read || 0;
               }
               // Track raw cost from messages as fallback
               if (msgData.cost) {
