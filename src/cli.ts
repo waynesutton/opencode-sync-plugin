@@ -14,6 +14,81 @@ import { join, dirname } from "path";
 import { createInterface } from "readline";
 import { fileURLToPath } from "url";
 
+// Pricing per million tokens (USD) - includes cache pricing
+const MODEL_PRICING: Record<
+  string,
+  { input: number; output: number; cacheWrite: number; cacheRead: number }
+> = {
+  "claude-sonnet-4-20250514": {
+    input: 3.0,
+    output: 15.0,
+    cacheWrite: 3.75,
+    cacheRead: 0.3,
+  },
+  "claude-opus-4-20250514": {
+    input: 15.0,
+    output: 75.0,
+    cacheWrite: 18.75,
+    cacheRead: 1.5,
+  },
+  "claude-opus-4-5-20251101": {
+    input: 15.0,
+    output: 75.0,
+    cacheWrite: 18.75,
+    cacheRead: 1.5,
+  },
+  "claude-3-5-sonnet-20241022": {
+    input: 3.0,
+    output: 15.0,
+    cacheWrite: 3.75,
+    cacheRead: 0.3,
+  },
+  "claude-3-opus-20240229": {
+    input: 15.0,
+    output: 75.0,
+    cacheWrite: 18.75,
+    cacheRead: 1.5,
+  },
+  "claude-3-5-haiku-20241022": {
+    input: 0.8,
+    output: 4.0,
+    cacheWrite: 1.0,
+    cacheRead: 0.08,
+  },
+};
+
+interface TokenStats {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+}
+
+function calculateCost(
+  model: string | undefined,
+  stats: TokenStats,
+): number {
+  if (!model) return 0;
+  let pricing = MODEL_PRICING[model];
+  if (!pricing) {
+    const matchingKey = Object.keys(MODEL_PRICING).find(
+      (k) => model.includes(k) || k.includes(model),
+    );
+    if (matchingKey) {
+      pricing = MODEL_PRICING[matchingKey];
+    }
+  }
+  if (!pricing) return 0;
+
+  // Calculate cost with proper cache pricing
+  const inputCost = stats.inputTokens * pricing.input;
+  const cacheWriteCost = stats.cacheCreationTokens * pricing.cacheWrite;
+  const cacheReadCost = stats.cacheReadTokens * pricing.cacheRead;
+  const outputCost = stats.outputTokens * pricing.output;
+
+  return (inputCost + cacheWriteCost + cacheReadCost + outputCost) / 1_000_000;
+}
+
 // Get package version
 function getVersion(): string {
   try {
@@ -319,17 +394,29 @@ interface OpenCodeLocalMessage {
   modelID?: string;
   providerID?: string;
   cost?: number;
-  tokens?: { input?: number; output?: number; reasoning?: number };
+  tokens?: {
+    input?: number;
+    output?: number;
+    reasoning?: number;
+    cache_creation?: number;
+    cache_read?: number;
+  };
 }
 
-// Read message text content from the part directory
-function getMessageTextContent(
+// Part type for tool-call and tool-result
+interface MessagePart {
+  type: "tool-call" | "tool-result";
+  content: unknown;
+}
+
+// Read message content (text and tool parts) from the part directory
+function getMessageContent(
   partBasePath: string,
   messageId: string,
-): string {
+): { textContent: string; parts: MessagePart[] } {
   const messagePartPath = join(partBasePath, messageId);
   if (!existsSync(messagePartPath)) {
-    return "";
+    return { textContent: "", parts: [] };
   }
 
   try {
@@ -337,6 +424,7 @@ function getMessageTextContent(
       f.endsWith(".json"),
     );
     let textContent = "";
+    const parts: MessagePart[] = [];
 
     for (const partFile of partFiles) {
       try {
@@ -345,15 +433,26 @@ function getMessageTextContent(
         );
         if (partData.type === "text" && partData.text) {
           textContent += partData.text;
+        } else if (partData.type === "tool") {
+          // OpenCode stores tool calls as type "tool" with tool name and state
+          parts.push({
+            type: "tool-call",
+            content: {
+              id: partData.id,
+              name: partData.tool,
+              args: partData.state?.input,
+              status: partData.state?.status,
+            },
+          });
         }
       } catch {
         // Skip invalid part files
       }
     }
 
-    return textContent;
+    return { textContent, parts };
   } catch {
-    return "";
+    return { textContent: "", parts: [] };
   }
 }
 
@@ -595,7 +694,9 @@ async function syncAllSessions(
     // Calculate total tokens and cost from messages
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
-    let totalCost = 0;
+    let totalCacheCreationTokens = 0;
+    let totalCacheReadTokens = 0;
+    let totalMessageCost = 0;
     let model = "";
     let provider = "";
 
@@ -623,9 +724,12 @@ async function syncAllSessions(
               if (msgData.tokens) {
                 totalPromptTokens += msgData.tokens.input || 0;
                 totalCompletionTokens += msgData.tokens.output || 0;
+                totalCacheCreationTokens += msgData.tokens.cache_creation || 0;
+                totalCacheReadTokens += msgData.tokens.cache_read || 0;
               }
+              // Track raw cost from messages as fallback
               if (msgData.cost) {
-                totalCost += msgData.cost;
+                totalMessageCost += msgData.cost;
               }
               if (msgData.modelID && !model) {
                 model = msgData.modelID;
@@ -641,6 +745,24 @@ async function syncAllSessions(
       } catch {
         // No messages directory
       }
+    }
+
+    // Calculate cost from tokens using model pricing, fall back to message costs
+    let totalCost = calculateCost(model || undefined, {
+      inputTokens: totalPromptTokens,
+      outputTokens: totalCompletionTokens,
+      cacheCreationTokens: totalCacheCreationTokens,
+      cacheReadTokens: totalCacheReadTokens,
+    });
+    // Fall back to aggregated message costs for models not in pricing table
+    if (totalCost === 0 && totalMessageCost > 0) {
+      totalCost = totalMessageCost;
+    }
+
+    // Calculate duration from session timestamps
+    let durationMs: number | undefined;
+    if (data.time?.created && data.time?.updated) {
+      durationMs = data.time.updated - data.time.created;
     }
 
     // Sync the session
@@ -660,7 +782,10 @@ async function syncAllSessions(
           provider: provider || "opencode",
           promptTokens: totalPromptTokens,
           completionTokens: totalCompletionTokens,
+          cacheCreationTokens: totalCacheCreationTokens,
+          cacheReadTokens: totalCacheReadTokens,
           cost: totalCost,
+          durationMs,
         }),
       });
 
@@ -677,8 +802,8 @@ async function syncAllSessions(
       let msgCount = 0;
       for (const msg of messages) {
         try {
-          // Get the actual message text content from the part directory
-          const textContent = getMessageTextContent(partPath, msg.id);
+          // Get the actual message content (text and tool parts) from the part directory
+          const { textContent, parts } = getMessageContent(partPath, msg.id);
 
           const msgRes = await fetch(`${siteUrl}/sync/message`, {
             method: "POST",
@@ -698,6 +823,7 @@ async function syncAllSessions(
                 msg.time?.completed && msg.time?.created
                   ? msg.time.completed - msg.time.created
                   : undefined,
+              parts: parts.length > 0 ? parts : undefined,
             }),
           });
 

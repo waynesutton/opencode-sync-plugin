@@ -6,6 +6,10 @@ const syncedSessions = new Set<string>();
 const syncedMessages = new Set<string>();
 // Store message parts and metadata to combine them
 const messagePartsText = new Map<string, string[]>();
+const messageToolParts = new Map<
+  string,
+  Array<{ type: "tool-call" | "tool-result"; content: unknown }>
+>();
 const messageMetadata = new Map<
   string,
   { role: string; sessionId: string; info: any }
@@ -61,6 +65,10 @@ function doSyncSession(session: any) {
       session.tokens?.input || session.usage?.promptTokens || 0;
     const completionTokens =
       session.tokens?.output || session.usage?.completionTokens || 0;
+    const cacheCreationTokens =
+      session.tokens?.cache_creation || session.usage?.cacheCreationTokens || 0;
+    const cacheReadTokens =
+      session.tokens?.cache_read || session.usage?.cacheReadTokens || 0;
     const cost = session.cost || session.usage?.cost || 0;
     fetch(`${url}/sync/session`, {
       method: "POST",
@@ -77,6 +85,8 @@ function doSyncSession(session: any) {
         provider: providerId,
         promptTokens,
         completionTokens,
+        cacheCreationTokens,
+        cacheReadTokens,
         cost,
       }),
     }).catch(() => {});
@@ -94,17 +104,19 @@ function doSyncMessage(
   role: string,
   textContent: string,
   metadata?: any,
+  parts?: Array<{ type: "tool-call" | "tool-result"; content: unknown }>,
 ) {
   try {
     const config = getConfig();
     if (!config?.apiKey || !config?.convexUrl) {
       return;
     }
-    if (!textContent || textContent.trim().length === 0) {
+    // Allow messages with parts even if no text content
+    if ((!textContent || textContent.trim().length === 0) && (!parts || parts.length === 0)) {
       return;
     }
     const finalRole =
-      role === "unknown" || !role ? inferRole(textContent) : role;
+      role === "unknown" || !role ? inferRole(textContent || "") : role;
     const url = config.convexUrl.replace(".convex.cloud", ".convex.site");
     let durationMs: number | undefined;
     if (metadata?.time?.completed && metadata?.time?.created) {
@@ -120,11 +132,12 @@ function doSyncMessage(
         sessionExternalId: sessionId,
         externalId: messageId,
         role: finalRole,
-        textContent,
+        textContent: textContent || "",
         model: metadata?.modelID,
         promptTokens: metadata?.tokens?.input,
         completionTokens: metadata?.tokens?.output,
         durationMs,
+        parts,
       }),
     }).catch(() => {});
   } catch {
@@ -133,15 +146,19 @@ function doSyncMessage(
 }
 
 /**
- * Try to sync a message if we have both metadata and text content
+ * Try to sync a message if we have both metadata and text content (or tool parts)
  */
 function trySyncMessage(messageId: string) {
   if (syncedMessages.has(messageId)) return;
   const metadata = messageMetadata.get(messageId);
   const textParts = messagePartsText.get(messageId);
-  if (!metadata || !textParts || textParts.length === 0) return;
-  const textContent = textParts.join("");
-  if (!textContent.trim()) return;
+  const toolParts = messageToolParts.get(messageId);
+  if (!metadata) return;
+  // Require either text parts or tool parts
+  if ((!textParts || textParts.length === 0) && (!toolParts || toolParts.length === 0)) return;
+  const textContent = textParts?.join("") || "";
+  // Allow messages with tool parts even if text is empty
+  if (!textContent.trim() && (!toolParts || toolParts.length === 0)) return;
   syncedMessages.add(messageId);
   doSyncMessage(
     metadata.sessionId,
@@ -149,8 +166,10 @@ function trySyncMessage(messageId: string) {
     metadata.role,
     textContent,
     metadata.info,
+    toolParts,
   );
   messagePartsText.delete(messageId);
+  messageToolParts.delete(messageId);
   messageMetadata.delete(messageId);
 }
 
@@ -201,13 +220,12 @@ export const OpenCodeSyncPlugin: Plugin = async () => {
             }
           }
         }
-        // Message text parts
+        // Message parts (text, tool-call, tool-result)
         if (event.type === "message.part.updated") {
           const part = props?.part;
-          if (part?.type === "text" && part?.messageID && part?.sessionID) {
+          if (part?.messageID && part?.sessionID) {
             const messageId = part.messageID;
-            const text = part.text || "";
-            messagePartsText.set(messageId, [text]);
+            // Ensure metadata exists
             if (!messageMetadata.has(messageId)) {
               messageMetadata.set(messageId, {
                 role: "unknown",
@@ -215,7 +233,27 @@ export const OpenCodeSyncPlugin: Plugin = async () => {
                 info: {},
               });
             }
-            scheduleSyncMessage(messageId);
+            // Handle text parts
+            if (part?.type === "text") {
+              const text = part.text || "";
+              messagePartsText.set(messageId, [text]);
+              scheduleSyncMessage(messageId);
+            }
+            // Handle tool parts (OpenCode uses type "tool" for tool calls)
+            else if (part?.type === "tool") {
+              const existingParts = messageToolParts.get(messageId) || [];
+              existingParts.push({
+                type: "tool-call",
+                content: {
+                  id: part.id,
+                  name: part.tool,
+                  args: part.state?.input,
+                  status: part.state?.status,
+                },
+              });
+              messageToolParts.set(messageId, existingParts);
+              scheduleSyncMessage(messageId);
+            }
           }
         }
       } catch {
