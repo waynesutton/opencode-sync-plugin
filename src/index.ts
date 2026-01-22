@@ -1,5 +1,8 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { getConfig } from "./config.js";
+import { appendFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 
 // Track what we've already synced to avoid duplicates
 const syncedSessions = new Set<string>();
@@ -211,13 +214,9 @@ function scheduleSyncMessage(messageId: string) {
   syncTimeouts.set(messageId, timeout);
 }
 
-import { appendFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
-
-// Debug mode - set OPENCODE_SYNC_DEBUG=1 to enable
+// Debug mode - set OPENCODE_SYNC_DEBUG=1 to enable logging to ~/.opencode-sync-debug.log
 const DEBUG = process.env.OPENCODE_SYNC_DEBUG === "1";
-const DEBUG_LOG = join(homedir(), ".opencode-sync-debug.log");
+const DEBUG_LOG = DEBUG ? join(homedir(), ".opencode-sync-debug.log") : "";
 
 function debugLog(msg: string, data?: unknown) {
   if (!DEBUG) return;
@@ -229,15 +228,14 @@ function debugLog(msg: string, data?: unknown) {
 }
 
 export const OpenCodeSyncPlugin: Plugin = async () => {
-  // Always log startup to confirm plugin loads
-  appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] Plugin loaded, DEBUG=${DEBUG}\n`);
+  debugLog("Plugin loaded");
 
   return {
     event: async ({ event }) => {
       try {
         const props = event.properties as any;
 
-        // Debug logging
+        // Debug logging for event inspection
         if (DEBUG) {
           if (event.type === "message.updated") {
             debugLog("message.updated info:", props?.info);
