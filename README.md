@@ -31,6 +31,44 @@ npm install
 npm run build
 ```
 
+## Upgrading
+
+To upgrade to the latest version of the plugin:
+
+**Using npm:**
+
+```bash
+npm update -g opencode-sync-plugin
+```
+
+**Or reinstall to get the latest:**
+
+```bash
+npm install -g opencode-sync-plugin@latest
+```
+
+**Clear the OpenCode plugin cache** (required for OpenCode to pick up the new version):
+
+```bash
+rm -rf ~/.cache/opencode/node_modules/opencode-sync-plugin
+```
+
+**Restart OpenCode** to load the updated plugin.
+
+**Check your installed version:**
+
+```bash
+opencode-sync version
+```
+
+**Backfill existing sessions with proper titles** (if upgrading from v0.3.2 or earlier):
+
+```bash
+opencode-sync sync --force
+```
+
+This re-syncs all local sessions with accurate titles from OpenCode's local storage.
+
 ## Setup
 
 ### 1. Get your credentials
@@ -112,9 +150,11 @@ The plugin hooks into OpenCode events and syncs data automatically:
 |-------|--------|
 | `session.created` | Creates session record in cloud |
 | `session.updated` | Updates session metadata |
-| `session.idle` | Final sync with token counts and cost |
+| `session.idle` | Final sync with accurate title, token counts, and cost |
 | `message.updated` | Syncs user and assistant messages |
 | `message.part.updated` | Syncs completed message parts |
+
+On `session.idle`, the plugin queries OpenCode's SDK to get the accurate session title (generated after the first message exchange). This ensures sessions are stored with meaningful titles instead of "Untitled".
 
 Data is stored in your Convex deployment. You can view, search, and share sessions via the web UI.
 

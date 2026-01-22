@@ -70,7 +70,7 @@ function doSyncSession(session: any) {
       },
       body: JSON.stringify({
         externalId: session.id,
-        title: session.title || "Untitled Session",
+        title: session.title || session.slug || "Untitled Session",
         projectPath,
         projectName: projectPath?.split("/").pop(),
         model: modelId,
@@ -167,7 +167,7 @@ function scheduleSyncMessage(messageId: string) {
   syncTimeouts.set(messageId, timeout);
 }
 
-export const OpenCodeSyncPlugin: Plugin = async () => {
+export const OpenCodeSyncPlugin: Plugin = async ({ client }) => {
   return {
     event: async ({ event }) => {
       try {
@@ -183,6 +183,28 @@ export const OpenCodeSyncPlugin: Plugin = async () => {
             if (event.type === "session.created") {
               if (syncedSessions.has(sessionId)) return;
               syncedSessions.add(sessionId);
+            }
+            // On session.idle, query OpenCode SDK for accurate title
+            if (event.type === "session.idle" && client) {
+              try {
+                const response = await client.session.get({
+                  path: { id: sessionId },
+                });
+                // Handle SDK response (may be Session or error response)
+                const sessionData = (response as any)?.data || response;
+                const title = sessionData?.title;
+                const slug = sessionData?.slug;
+                if (title || slug) {
+                  doSyncSession({
+                    ...props,
+                    title,
+                    slug,
+                  });
+                  return;
+                }
+              } catch {
+                // Fall back to event properties
+              }
             }
             doSyncSession(props);
           }

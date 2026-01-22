@@ -1,6 +1,6 @@
 {
   "name": "opencode-sync-plugin",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Sync your OpenCode sessions to the OpenSync dashboard",
   "type": "module",
   "main": "dist/index.js",

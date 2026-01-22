@@ -4,6 +4,17 @@ All notable changes to opencode-sync-plugin.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.3] - 2026-01-22
+
+### Fixed
+- Session titles now sync correctly instead of showing "Untitled"
+- Plugin queries OpenCode SDK on session.idle for accurate title
+- Added slug as fallback when title is not available
+
+### Added
+- Upgrade instructions in README
+- Backfill command documentation (`sync --force` to update existing sessions)
+
 ## [0.3.1] - 2026-01-19
 
 ### Added

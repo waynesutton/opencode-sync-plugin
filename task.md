@@ -22,6 +22,12 @@ Completed tasks for opencode-sync-plugin.
 - [x] Debounced message syncing and role inference
 - [x] Remove all console logging from plugin for silent operation
 
+## Completed (continued)
+
+- [x] Fix session titles showing "Untitled" by querying SDK on session.idle
+- [x] Add slug as fallback for session titles
+- [x] Add upgrade instructions to README
+
 ## Pending
 
 - [ ] Add session filtering by date range
