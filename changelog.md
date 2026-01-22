@@ -4,6 +4,13 @@ All notable changes to opencode-sync-plugin.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.5] - 2026-01-22
+
+### Fixed
+- Session cost and token counts now sync correctly from message data
+- Aggregates cost, promptTokens, and completionTokens from all messages in session
+- Reads model and provider from message files for accurate tracking
+
 ## [0.3.4] - 2026-01-22
 
 ### Fixed

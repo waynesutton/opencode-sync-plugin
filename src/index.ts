@@ -7,36 +7,85 @@ import { join } from "path";
 // Track what we've already synced to avoid duplicates
 const syncedSessions = new Set<string>();
 
-/**
- * Read session title from OpenCode's local storage
- */
-function getLocalSessionData(
-  sessionId: string,
-): { title?: string; slug?: string } | null {
-  try {
-    const storagePath = join(
-      homedir(),
-      ".local",
-      "share",
-      "opencode",
-      "storage",
-      "session",
-    );
-    if (!existsSync(storagePath)) return null;
+interface LocalSessionData {
+  title?: string;
+  slug?: string;
+  model?: string;
+  provider?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  cost?: number;
+}
 
-    // Search through project directories for the session file
-    const projectDirs = readdirSync(storagePath, { withFileTypes: true })
+/**
+ * Read session data from OpenCode's local storage (session + messages)
+ */
+function getLocalSessionData(sessionId: string): LocalSessionData | null {
+  try {
+    const basePath = join(homedir(), ".local", "share", "opencode", "storage");
+    const sessionPath = join(basePath, "session");
+    const messagePath = join(basePath, "message", sessionId);
+
+    if (!existsSync(sessionPath)) return null;
+
+    let result: LocalSessionData = {};
+
+    // Read session file for title/slug
+    const projectDirs = readdirSync(sessionPath, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name);
 
     for (const projectDir of projectDirs) {
-      const sessionFile = join(storagePath, projectDir, `${sessionId}.json`);
+      const sessionFile = join(sessionPath, projectDir, `${sessionId}.json`);
       if (existsSync(sessionFile)) {
         const content = readFileSync(sessionFile, "utf8");
         const data = JSON.parse(content);
-        return { title: data.title, slug: data.slug };
+        result.title = data.title;
+        result.slug = data.slug;
+        break;
       }
     }
+
+    // Read message files for cost/tokens
+    if (existsSync(messagePath)) {
+      let totalPromptTokens = 0;
+      let totalCompletionTokens = 0;
+      let totalCost = 0;
+
+      const messageFiles = readdirSync(messagePath).filter((f) =>
+        f.endsWith(".json"),
+      );
+
+      for (const msgFile of messageFiles) {
+        try {
+          const msgContent = readFileSync(join(messagePath, msgFile), "utf8");
+          const msgData = JSON.parse(msgContent);
+
+          if (msgData.tokens) {
+            totalPromptTokens += msgData.tokens.input || 0;
+            totalCompletionTokens += msgData.tokens.output || 0;
+          }
+          if (msgData.cost) {
+            totalCost += msgData.cost;
+          }
+          // Get model/provider from first message that has it
+          if (!result.model && msgData.modelID) {
+            result.model = msgData.modelID;
+          }
+          if (!result.provider && msgData.providerID) {
+            result.provider = msgData.providerID;
+          }
+        } catch {
+          // Skip invalid message files
+        }
+      }
+
+      result.promptTokens = totalPromptTokens;
+      result.completionTokens = totalCompletionTokens;
+      result.cost = totalCost;
+    }
+
+    return result;
   } catch {
     // Silent
   }
@@ -223,41 +272,44 @@ export const OpenCodeSyncPlugin: Plugin = async ({ client }) => {
               if (syncedSessions.has(sessionId)) return;
               syncedSessions.add(sessionId);
             }
-            // On session.idle, get accurate title from local storage or SDK
+            // On session.idle, get accurate data from local storage
             if (event.type === "session.idle") {
-              let title = props?.title;
-              let slug = props?.slug;
+              const localData = getLocalSessionData(sessionId);
 
-              // Try reading from local storage first (most reliable)
-              if (!title) {
-                const localData = getLocalSessionData(sessionId);
-                if (localData) {
-                  title = localData.title;
-                  slug = localData.slug;
-                }
+              if (localData) {
+                doSyncSession({
+                  ...props,
+                  title: localData.title || props?.title,
+                  slug: localData.slug || props?.slug,
+                  modelID: localData.model || props?.modelID,
+                  providerID: localData.provider || props?.providerID,
+                  tokens: {
+                    input: localData.promptTokens || 0,
+                    output: localData.completionTokens || 0,
+                  },
+                  cost: localData.cost || 0,
+                });
+                return;
               }
 
-              // Fall back to SDK client if available
-              if (!title && client) {
+              // Fall back to SDK client if local storage unavailable
+              if (client) {
                 try {
                   const response = await client.session.get({
                     path: { id: sessionId },
                   });
                   const sessionData = (response as any)?.data || response;
-                  title = sessionData?.title;
-                  slug = sessionData?.slug;
+                  if (sessionData?.title || sessionData?.slug) {
+                    doSyncSession({
+                      ...props,
+                      title: sessionData.title,
+                      slug: sessionData.slug,
+                    });
+                    return;
+                  }
                 } catch {
                   // Silent
                 }
-              }
-
-              if (title || slug) {
-                doSyncSession({
-                  ...props,
-                  title,
-                  slug,
-                });
-                return;
               }
             }
             doSyncSession(props);
