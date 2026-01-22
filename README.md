@@ -4,7 +4,7 @@ Sync your OpenCode sessions to the cloud. Search, share, and access your coding 
 
 [![npm version](https://img.shields.io/npm/v/opencode-sync-plugin.svg)](https://www.npmjs.com/package/opencode-sync-plugin)
 
-## OpenSync Ecosystem
+## OpenSync Ecosystem link
 
 | Package | Description | Links |
 |---------|-------------|-------|
