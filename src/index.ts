@@ -211,24 +211,55 @@ function scheduleSyncMessage(messageId: string) {
   syncTimeouts.set(messageId, timeout);
 }
 
+import { appendFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+
+// Debug mode - set OPENCODE_SYNC_DEBUG=1 to enable
+const DEBUG = process.env.OPENCODE_SYNC_DEBUG === "1";
+const DEBUG_LOG = join(homedir(), ".opencode-sync-debug.log");
+
+function debugLog(msg: string, data?: unknown) {
+  if (!DEBUG) return;
+  const timestamp = new Date().toISOString();
+  const line = data
+    ? `[${timestamp}] ${msg}\n${JSON.stringify(data, null, 2)}\n\n`
+    : `[${timestamp}] ${msg}\n`;
+  appendFileSync(DEBUG_LOG, line);
+}
+
 export const OpenCodeSyncPlugin: Plugin = async () => {
+  // Always log startup to confirm plugin loads
+  appendFileSync(DEBUG_LOG, `[${new Date().toISOString()}] Plugin loaded, DEBUG=${DEBUG}\n`);
+
   return {
     event: async ({ event }) => {
       try {
         const props = event.properties as any;
-        // Session events
+
+        // Debug logging
+        if (DEBUG) {
+          if (event.type === "message.updated") {
+            debugLog("message.updated info:", props?.info);
+          }
+          if (event.type.startsWith("session.")) {
+            debugLog(`${event.type}:`, props);
+          }
+        }
+        // Session events - data is in props.info, not props directly
         if (
           event.type === "session.created" ||
           event.type === "session.updated" ||
           event.type === "session.idle"
         ) {
-          const sessionId = props?.id;
+          const sessionInfo = props?.info || props;
+          const sessionId = sessionInfo?.id;
           if (sessionId) {
             if (event.type === "session.created") {
               if (syncedSessions.has(sessionId)) return;
               syncedSessions.add(sessionId);
             }
-            doSyncSession(props);
+            doSyncSession(sessionInfo);
           }
         }
         // Message metadata
@@ -252,8 +283,10 @@ export const OpenCodeSyncPlugin: Plugin = async () => {
               cacheReadTokens: 0,
               cost: 0,
             };
-            if (info.modelID && !existing.model) {
-              existing.model = info.modelID;
+            // Model can be flat (info.modelID) or nested (info.model.modelID)
+            const modelID = info.modelID || info.model?.modelID;
+            if (modelID && !existing.model) {
+              existing.model = modelID;
             }
             if (info.tokens) {
               existing.promptTokens += info.tokens.input || 0;
