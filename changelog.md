@@ -4,6 +4,13 @@ All notable changes to opencode-sync-plugin.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.4] - 2026-01-22
+
+### Fixed
+- Session titles now read directly from OpenCode's local storage for reliability
+- Falls back to SDK client query if local storage unavailable
+- Resolves "Untitled Session" issue when SDK client is not available in plugin context
+
 ## [0.3.3] - 2026-01-22
 
 ### Fixed

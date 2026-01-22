@@ -1,8 +1,47 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { getConfig } from "./config.js";
+import { existsSync, readFileSync, readdirSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 
 // Track what we've already synced to avoid duplicates
 const syncedSessions = new Set<string>();
+
+/**
+ * Read session title from OpenCode's local storage
+ */
+function getLocalSessionData(
+  sessionId: string,
+): { title?: string; slug?: string } | null {
+  try {
+    const storagePath = join(
+      homedir(),
+      ".local",
+      "share",
+      "opencode",
+      "storage",
+      "session",
+    );
+    if (!existsSync(storagePath)) return null;
+
+    // Search through project directories for the session file
+    const projectDirs = readdirSync(storagePath, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+
+    for (const projectDir of projectDirs) {
+      const sessionFile = join(storagePath, projectDir, `${sessionId}.json`);
+      if (existsSync(sessionFile)) {
+        const content = readFileSync(sessionFile, "utf8");
+        const data = JSON.parse(content);
+        return { title: data.title, slug: data.slug };
+      }
+    }
+  } catch {
+    // Silent
+  }
+  return null;
+}
 const syncedMessages = new Set<string>();
 // Store message parts and metadata to combine them
 const messagePartsText = new Map<string, string[]>();
@@ -184,26 +223,41 @@ export const OpenCodeSyncPlugin: Plugin = async ({ client }) => {
               if (syncedSessions.has(sessionId)) return;
               syncedSessions.add(sessionId);
             }
-            // On session.idle, query OpenCode SDK for accurate title
-            if (event.type === "session.idle" && client) {
-              try {
-                const response = await client.session.get({
-                  path: { id: sessionId },
-                });
-                // Handle SDK response (may be Session or error response)
-                const sessionData = (response as any)?.data || response;
-                const title = sessionData?.title;
-                const slug = sessionData?.slug;
-                if (title || slug) {
-                  doSyncSession({
-                    ...props,
-                    title,
-                    slug,
-                  });
-                  return;
+            // On session.idle, get accurate title from local storage or SDK
+            if (event.type === "session.idle") {
+              let title = props?.title;
+              let slug = props?.slug;
+
+              // Try reading from local storage first (most reliable)
+              if (!title) {
+                const localData = getLocalSessionData(sessionId);
+                if (localData) {
+                  title = localData.title;
+                  slug = localData.slug;
                 }
-              } catch {
-                // Fall back to event properties
+              }
+
+              // Fall back to SDK client if available
+              if (!title && client) {
+                try {
+                  const response = await client.session.get({
+                    path: { id: sessionId },
+                  });
+                  const sessionData = (response as any)?.data || response;
+                  title = sessionData?.title;
+                  slug = sessionData?.slug;
+                } catch {
+                  // Silent
+                }
+              }
+
+              if (title || slug) {
+                doSyncSession({
+                  ...props,
+                  title,
+                  slug,
+                });
+                return;
               }
             }
             doSyncSession(props);
