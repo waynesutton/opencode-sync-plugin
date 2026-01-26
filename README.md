@@ -4,13 +4,16 @@ Sync your OpenCode sessions to the cloud. Search, share, and access your coding 
 
 [![npm version](https://img.shields.io/npm/v/opencode-sync-plugin.svg)](https://www.npmjs.com/package/opencode-sync-plugin)
 
-## OpenSync Ecosystem link
+## OpenSync Ecosystem
 
-| Package | Description | Links |
-|---------|-------------|-------|
-| **OpenSync** | Beautiful dashboards for OpenCode and Claude Code sessions synced to the cloud. Track coding sessions, analyze tool usage, and monitor token consumption across projects. | [Website](https://opensync.dev/) / [GitHub](https://github.com/waynesutton/opensync) |
-| **opencode-sync-plugin** | Sync your OpenCode sessions to the OpenSync dashboard. | [GitHub](https://github.com/waynesutton/opencode-sync-plugin) / [npm](https://www.npmjs.com/package/opencode-sync-plugin) |
-| **claude-code-sync** | Sync your Claude Code sessions to the OpenSync dashboard. | [GitHub](https://github.com/waynesutton/claude-code-sync) / [npm](https://www.npmjs.com/package/claude-code-sync) |
+| Project                | Description                                   | Links                                                                                                                         |
+| ---------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| OpenSync               | Dashboards for AI coding sessions             | [Website](https://www.opensync.dev/) / [GitHub](https://github.com/waynesutton/opensync)                                      |
+| opencode-sync-plugin   | Sync OpenCode sessions                        | [GitHub](https://github.com/waynesutton/opencode-sync-plugin) / [npm](https://www.npmjs.com/package/opencode-sync-plugin)     |
+| claude-code-sync       | Sync Claude Code sessions                     | [GitHub](https://github.com/waynesutton/claude-code-sync) / [npm](https://www.npmjs.com/package/claude-code-sync)             |
+| droid-sync             | Sync Factory Droid sessions (community built) | [GitHub](https://github.com/yemyat/droid-sync-plugin) / [npm](https://www.npmjs.com/package/droid-sync)                       |
+| codex-sync             | Sync Codex CLI sessions                       | [GitHub](https://github.com/waynesutton/codex-sync-plugin) / [npm](https://www.npmjs.com/package/codex-sync)                  |
+| cursor-opensync-plugin | Sync Cursor sessions                          | [GitHub](https://github.com/waynesutton/cursor-cli-sync-plugin) / [npm](https://www.npmjs.com/package/cursor-opensync-plugin) |
 
 ## Installation
 
@@ -146,13 +149,13 @@ This checks that both your credentials and OpenCode config are set up correctly.
 
 The plugin hooks into OpenCode events and syncs data automatically:
 
-| Event | Action |
-|-------|--------|
-| `session.created` | Creates session record in cloud |
-| `session.updated` | Updates session metadata |
-| `session.idle` | Final sync with accurate title, token counts, and cost |
-| `message.updated` | Syncs user and assistant messages |
-| `message.part.updated` | Syncs completed message parts |
+| Event                  | Action                                                 |
+| ---------------------- | ------------------------------------------------------ |
+| `session.created`      | Creates session record in cloud                        |
+| `session.updated`      | Updates session metadata                               |
+| `session.idle`         | Final sync with accurate title, token counts, and cost |
+| `message.updated`      | Syncs user and assistant messages                      |
+| `message.part.updated` | Syncs completed message parts                          |
 
 On `session.idle`, the plugin queries OpenCode's SDK to get the accurate session title (generated after the first message exchange). This ensures sessions are stored with meaningful titles instead of "Untitled".
 
@@ -160,19 +163,19 @@ Data is stored in your Convex deployment. You can view, search, and share sessio
 
 ## CLI Commands
 
-| Command | Description |
-|---------|-------------|
-| `opencode-sync login` | Configure with Convex URL and API Key |
-| `opencode-sync verify` | Verify credentials and OpenCode config |
-| `opencode-sync sync` | Test connectivity and create a test session |
-| `opencode-sync sync --new` | Sync only new sessions (uses local tracking) |
-| `opencode-sync sync --all` | Sync all sessions (queries backend, skips existing) |
-| `opencode-sync sync --force` | Clear tracking and resync all sessions |
-| `opencode-sync logout` | Clear stored credentials |
-| `opencode-sync status` | Show authentication status |
-| `opencode-sync config` | Show current configuration |
-| `opencode-sync version` | Show installed version |
-| `opencode-sync help` | Show help message |
+| Command                      | Description                                         |
+| ---------------------------- | --------------------------------------------------- |
+| `opencode-sync login`        | Configure with Convex URL and API Key               |
+| `opencode-sync verify`       | Verify credentials and OpenCode config              |
+| `opencode-sync sync`         | Test connectivity and create a test session         |
+| `opencode-sync sync --new`   | Sync only new sessions (uses local tracking)        |
+| `opencode-sync sync --all`   | Sync all sessions (queries backend, skips existing) |
+| `opencode-sync sync --force` | Clear tracking and resync all sessions              |
+| `opencode-sync logout`       | Clear stored credentials                            |
+| `opencode-sync status`       | Show authentication status                          |
+| `opencode-sync config`       | Show current configuration                          |
+| `opencode-sync version`      | Show installed version                              |
+| `opencode-sync help`         | Show help message                                   |
 
 ## Configuration storage
 
@@ -190,7 +193,13 @@ This plugin follows the [OpenCode plugin specification](https://opencode.ai/docs
 ```typescript
 import type { Plugin } from "@opencode-ai/plugin";
 
-export const OpenCodeSyncPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+export const OpenCodeSyncPlugin: Plugin = async ({
+  project,
+  client,
+  $,
+  directory,
+  worktree,
+}) => {
   // Initialize plugin
   await client.app.log({
     service: "opencode-sync",

@@ -4,6 +4,13 @@ All notable changes to opencode-sync-plugin.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.6] - 2026-01-22
+
+### Fixed
+- Added 1 second delay before reading local storage on session.idle
+- Gives OpenCode time to write session title to disk before plugin reads it
+- Resolves timing issue where title was read before file was updated
+
 ## [0.3.5] - 2026-01-22
 
 ### Fixed

@@ -272,45 +272,31 @@ export const OpenCodeSyncPlugin: Plugin = async ({ client }) => {
               if (syncedSessions.has(sessionId)) return;
               syncedSessions.add(sessionId);
             }
-            // On session.idle, get accurate data from local storage
+            // On session.idle, delay then read from local storage
+            // (gives OpenCode time to write title to disk)
             if (event.type === "session.idle") {
-              const localData = getLocalSessionData(sessionId);
+              setTimeout(() => {
+                const localData = getLocalSessionData(sessionId);
 
-              if (localData) {
-                doSyncSession({
-                  ...props,
-                  title: localData.title || props?.title,
-                  slug: localData.slug || props?.slug,
-                  modelID: localData.model || props?.modelID,
-                  providerID: localData.provider || props?.providerID,
-                  tokens: {
-                    input: localData.promptTokens || 0,
-                    output: localData.completionTokens || 0,
-                  },
-                  cost: localData.cost || 0,
-                });
-                return;
-              }
-
-              // Fall back to SDK client if local storage unavailable
-              if (client) {
-                try {
-                  const response = await client.session.get({
-                    path: { id: sessionId },
+                if (localData && (localData.title || localData.slug)) {
+                  doSyncSession({
+                    ...props,
+                    title: localData.title || props?.title,
+                    slug: localData.slug || props?.slug,
+                    modelID: localData.model || props?.modelID,
+                    providerID: localData.provider || props?.providerID,
+                    tokens: {
+                      input: localData.promptTokens || 0,
+                      output: localData.completionTokens || 0,
+                    },
+                    cost: localData.cost || 0,
                   });
-                  const sessionData = (response as any)?.data || response;
-                  if (sessionData?.title || sessionData?.slug) {
-                    doSyncSession({
-                      ...props,
-                      title: sessionData.title,
-                      slug: sessionData.slug,
-                    });
-                    return;
-                  }
-                } catch {
-                  // Silent
+                } else {
+                  // Fall back to event properties
+                  doSyncSession(props);
                 }
-              }
+              }, 1000); // 1 second delay for file write
+              return;
             }
             doSyncSession(props);
           }
