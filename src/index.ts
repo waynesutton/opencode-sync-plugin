@@ -1,5 +1,5 @@
 import type { Plugin } from "@opencode-ai/plugin";
-import { getConfig } from "./config.js";
+import { getConfig, getSiteUrl } from "./config.js";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -140,7 +140,7 @@ function doSyncSession(session: any) {
     if (!config?.apiKey || !config?.convexUrl) {
       return;
     }
-    const url = config.convexUrl.replace(".convex.cloud", ".convex.site");
+    const url = getSiteUrl(config);
     const projectPath = session.path?.cwd || session.cwd || session.directory;
     const modelId = session.modelID || session.model?.modelID || session.model;
     const providerId =
@@ -193,7 +193,7 @@ function doSyncMessage(
     }
     const finalRole =
       role === "unknown" || !role ? inferRole(textContent) : role;
-    const url = config.convexUrl.replace(".convex.cloud", ".convex.site");
+    const url = getSiteUrl(config);
     let durationMs: number | undefined;
     if (metadata?.time?.completed && metadata?.time?.created) {
       durationMs = metadata.time.completed - metadata.time.created;

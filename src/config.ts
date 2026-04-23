@@ -6,6 +6,7 @@ import { join } from "path";
 
 interface Config {
   convexUrl: string;
+  siteUrl?: string;
   apiKey: string;
 }
 
@@ -36,6 +37,19 @@ export function setConfig(cfg: Config): void {
   } catch (e) {
     console.error("Error saving config:", e);
   }
+}
+
+/**
+ * Get the HTTP actions URL (site URL) from config.
+ * For Convex cloud: derives it by replacing .convex.cloud with .convex.site
+ * For self-hosted: uses siteUrl if set, otherwise uses convexUrl as-is
+ */
+export function getSiteUrl(config: Config): string {
+  if (config.siteUrl) return config.siteUrl;
+  if (config.convexUrl.includes(".convex.cloud")) {
+    return config.convexUrl.replace(".convex.cloud", ".convex.site");
+  }
+  return config.convexUrl;
 }
 
 export function clearConfig(): void {
