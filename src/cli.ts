@@ -7,6 +7,7 @@ import {
   getSyncedSessions,
   addSyncedSessions,
   clearSyncedSessions,
+  getSiteUrl,
 } from "./config.js";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { homedir } from "os";
@@ -71,22 +72,23 @@ async function login() {
 
   // Get Convex URL
   const convexUrl = await prompt(
-    "Convex URL (e.g., https://your-project.convex.cloud): ",
+    "Convex URL (e.g., https://your-project.convex.cloud or http://localhost:8080): ",
   );
   if (!convexUrl) {
     console.error("Convex URL is required");
     process.exit(1);
   }
 
-  // Validate URL format
+  // For self-hosted: optionally provide a separate site URL for HTTP actions
+  let siteUrl: string | undefined;
   if (
     !convexUrl.includes(".convex.cloud") &&
     !convexUrl.includes(".convex.site")
   ) {
-    console.error(
-      "Invalid Convex URL. Should end with .convex.cloud or .convex.site",
+    const input = await prompt(
+      "Site URL for HTTP actions (press Enter to use same URL): ",
     );
-    process.exit(1);
+    siteUrl = input || undefined;
   }
 
   // Get API Key
@@ -105,12 +107,12 @@ async function login() {
   }
 
   // Test the API key by making a request to the health endpoint
-  const siteUrl = convexUrl.replace(".convex.cloud", ".convex.site");
+  const healthUrl = getSiteUrl({ convexUrl, siteUrl, apiKey });
 
   console.log("\nVerifying credentials...");
 
   try {
-    const response = await fetch(`${siteUrl}/health`);
+    const response = await fetch(`${healthUrl}/health`);
 
     if (!response.ok) {
       console.error("\nFailed to connect to OpenSync backend.");
@@ -119,7 +121,7 @@ async function login() {
     }
 
     // Save config
-    setConfig({ convexUrl, apiKey });
+    setConfig({ convexUrl, siteUrl, apiKey });
 
     console.log("\nLogin successful!\n");
     console.log("  Convex URL:", convexUrl);
@@ -370,7 +372,7 @@ async function sync() {
     return;
   }
 
-  const siteUrl = config.convexUrl.replace(".convex.cloud", ".convex.site");
+  const siteUrl = getSiteUrl(config);
 
   if (syncForce) {
     // Clear local tracking and sync all
