@@ -1,3 +1,4 @@
+import { messageIdentity } from "./compatibility.js";
 import type { Plugin } from "@opencode-ai/plugin";
 import { getConfig } from "./config.js";
 import { existsSync, readFileSync, readdirSync } from "fs";
@@ -8,6 +9,7 @@ import { join } from "path";
 const syncedSessions = new Set<string>();
 
 interface LocalSessionData {
+  directory?: string;
   title?: string;
   slug?: string;
   model?: string;
@@ -42,6 +44,7 @@ function getLocalSessionData(sessionId: string): LocalSessionData | null {
         const data = JSON.parse(content);
         result.title = data.title;
         result.slug = data.slug;
+        result.directory = typeof data.directory === "string" ? data.directory : undefined;
         break;
       }
     }
@@ -69,12 +72,9 @@ function getLocalSessionData(sessionId: string): LocalSessionData | null {
             totalCost += msgData.cost;
           }
           // Get model/provider from first message that has it
-          if (!result.model && msgData.modelID) {
-            result.model = msgData.modelID;
-          }
-          if (!result.provider && msgData.providerID) {
-            result.provider = msgData.providerID;
-          }
+          const identity = messageIdentity(msgData);
+          result.model ||= identity.model;
+          result.provider ||= identity.provider;
         } catch {
           // Skip invalid message files
         }
@@ -278,11 +278,12 @@ export const OpenCodeSyncPlugin: Plugin = async ({ client }) => {
               setTimeout(() => {
                 const localData = getLocalSessionData(sessionId);
 
-                if (localData && (localData.title || localData.slug)) {
+                if (localData) {
                   doSyncSession({
                     ...props,
                     title: localData.title || props?.title,
                     slug: localData.slug || props?.slug,
+                    directory: localData.directory || props?.directory,
                     modelID: localData.model || props?.modelID,
                     providerID: localData.provider || props?.providerID,
                     tokens: {
