@@ -16,7 +16,8 @@
   },
   "scripts": {
     "build": "tsup src/index.ts src/cli.ts src/config.ts --format esm --dts --clean",
-    "dev": "tsup src/index.ts src/cli.ts src/config.ts --format esm --dts --watch"
+    "dev": "tsup src/index.ts src/cli.ts src/config.ts --format esm --dts --watch",
+    "test": "npm run build && node --experimental-strip-types --test tests/*.test.ts"
   },
   "files": [
     "dist"
@@ -56,5 +57,8 @@
     "@opencode-ai/plugin": {
       "optional": true
     }
+  },
+  "dependencies": {
+    "jsonc-parser": "3.3.1"
   }
 }

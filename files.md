@@ -28,3 +28,7 @@ Brief description of each file in the opencode-sync-plugin codebase.
 | `cli.js` | Compiled CLI binary |
 | `config.js` | Compiled config module |
 | `*.d.ts` | TypeScript declaration files |
+
+- `src/compatibility.ts`: JSONC registration and backward-compatible model/provider extraction.
+- `tests/compatibility.test.ts`, `tests/live-metadata.test.ts`: fixture-based compatibility tests.
+- `prds/verification-and-metadata-fixes.md`: scoped release tracker.

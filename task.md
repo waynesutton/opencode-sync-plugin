@@ -32,3 +32,8 @@ Completed tasks for opencode-sync-plugin.
 
 - [ ] Add session filtering by date range
 - [ ] Add dry-run mode for sync --all
+
+## Verification and metadata fixes (2026-10-04 02:01 UTC)
+
+- [x] Test JSONC/versioned registration and nested metadata fixes.
+- [ ] Reconcile npm/source versions and publish before closing #1/#3.

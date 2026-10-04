@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { hasSyncPlugin, messageIdentity } from "./compatibility.js";
 
 import {
   getConfig,
@@ -196,12 +197,7 @@ function verify() {
       configPath = path;
       try {
         const content = readFileSync(path, "utf8");
-        const parsed = JSON.parse(content);
-        if (
-          parsed.plugin &&
-          Array.isArray(parsed.plugin) &&
-          parsed.plugin.includes("opencode-sync-plugin")
-        ) {
+        if (hasSyncPlugin(content)) {
           pluginRegistered = true;
           break;
         }
@@ -627,12 +623,9 @@ async function syncAllSessions(
               if (msgData.cost) {
                 totalCost += msgData.cost;
               }
-              if (msgData.modelID && !model) {
-                model = msgData.modelID;
-              }
-              if (msgData.providerID && !provider) {
-                provider = msgData.providerID;
-              }
+              const identity = messageIdentity(msgData);
+              model ||= identity.model ?? "";
+              provider ||= identity.provider ?? "";
             }
           } catch {
             // Skip invalid message files
@@ -691,7 +684,7 @@ async function syncAllSessions(
               externalId: msg.id,
               role: msg.role,
               textContent,
-              model: msg.modelID,
+              model: messageIdentity(msg).model,
               promptTokens: msg.tokens?.input,
               completionTokens: msg.tokens?.output,
               durationMs:

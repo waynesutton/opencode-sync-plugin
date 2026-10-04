@@ -128,3 +128,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - CLI with login, logout, status, config commands
 - Event-driven sync on session.created, session.updated, session.idle
 - Message sync on message.updated, message.part.updated
+
+## Unreleased compatibility fixes
+
+- Recognize versioned plugin entries in JSONC configs.
+- Read session directory and nested model/provider metadata while retaining flat-field support.
